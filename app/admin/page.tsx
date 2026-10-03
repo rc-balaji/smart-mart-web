@@ -421,13 +421,13 @@ export default function AdminPage() {
           {data.trolleys.map(
             (trolley) => (
               <article
-                className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"
+                className="flex min-w-0 flex-col items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3.5 sm:p-4 md:flex-row md:items-center md:justify-between md:gap-3"
                 key={
                   trolley.trolleyId ||
                   trolley.id
                 }
               >
-                <div>
+                <div className="w-full min-w-0 md:flex-1">
                   <h3 className="truncate font-bold text-slate-900">
                     {trolley.trolleyId ||
                       trolley.id}
@@ -440,7 +440,7 @@ export default function AdminPage() {
                 </div>
 
                 <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${
+                  className={`max-w-full self-start whitespace-normal break-words rounded-full px-2.5 py-1 text-center text-[10px] font-black md:max-w-[45%] ${
                     trolley.status === 'AVAILABLE'
                       ? 'bg-emerald-100 text-emerald-800'
                       : trolley.status === 'IN_USE'

@@ -465,7 +465,7 @@ export default function DispatchPage() {
         </div>
 
         <button
-          className="flex min-w-60 items-center gap-3 rounded-2xl border border-white/15 bg-white/10 p-3.5 text-left text-white shadow-sm backdrop-blur transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-55"
+          className="flex w-full min-w-0 items-center gap-3 rounded-2xl border border-white/15 bg-white/10 p-3.5 text-left text-white shadow-sm backdrop-blur transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-55 sm:w-auto sm:min-w-60"
           onClick={openScanner}
           disabled={busy}
         >
@@ -554,19 +554,19 @@ export default function DispatchPage() {
 
       {data && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <div className="flex items-center justify-between gap-4">
-            <div>
+          <div className="flex flex-col items-start gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="min-w-0 flex-1">
               <span className="block text-[10px] font-black tracking-[0.16em] text-slate-500">
                 TROLLEY
               </span>
 
-              <h2 className="mt-1 text-xl font-black text-slate-950">
+              <h2 className="mt-1 break-all text-xl font-black text-slate-950">
                 {trolleyId}
               </h2>
             </div>
 
             <span
-              className={`inline-flex items-center rounded-full px-3 py-2 text-[11px] font-black ${
+              className={`max-w-full whitespace-normal break-words rounded-full px-3 py-2 text-center text-[11px] font-black sm:max-w-[45%] ${
                 trolleyStatus === 'AVAILABLE'
                   ? 'bg-emerald-100 text-emerald-800'
                   : trolleyStatus === 'IN_USE'
