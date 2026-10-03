@@ -142,3 +142,69 @@ export async function dispatchAction(action:string,p:Obj){
   }
   throw new Error('Unsupported dispatch action');
 }
+
+/* -------------------- Admin product master CRUD -------------------- */
+export async function listProducts(search=''){
+  const snap=await db().collection('products').orderBy('name').get();
+  const q=code(search).toLowerCase();
+  return snap.docs.map(x=>({id:x.id,...x.data()} as Obj)).filter((p:any)=>!q||[p.productId,p.name,p.category,p.pack,p.scanCode,p.barcode].some(v=>String(v||'').toLowerCase().includes(q)));
+}
+
+function normalizeProductPayload(p:Obj){
+  const unitPrice=money(p.unitPrice);
+  const stockQty=Math.max(0,Math.floor(Number(p.stockQty||0)));
+  const reorderLevel=Math.max(0,Math.floor(Number(p.reorderLevel||0)));
+  if(!code(p.name))throw new Error('Product name is required');
+  if(unitPrice<0)throw new Error('Price cannot be negative');
+  return {
+    category:code(p.category),name:code(p.name),pack:code(p.pack),unitPrice,
+    barcode:code(p.barcode),scanCode:code(p.scanCode),qrUrl:code(p.qrUrl),imageUrl:code(p.imageUrl),
+    stockQty,reorderLevel,isActive:p.isActive!==false,updatedAt:now()
+  };
+}
+
+async function nextProductId(){
+  const snap=await db().collection('products').get();
+  let max=0;
+  snap.docs.forEach(d=>{const m=String(d.id).match(/^PRD(\d+)$/i);if(m)max=Math.max(max,Number(m[1]))});
+  return `PRD${String(max+1).padStart(3,'0')}`;
+}
+
+export async function adminProductAction(action:string,p:Obj){
+  const d=db();
+  if(action==='CREATE_PRODUCT'){
+    const productId=code(p.productId)||await nextProductId();
+    const ref=d.collection('products').doc(productId);
+    if((await ref.get()).exists)throw new Error(`Product ${productId} already exists`);
+    const data=normalizeProductPayload({...p,scanCode:code(p.scanCode)||`SM-${productId}`});
+    await ref.set({productId,...data,createdAt:now()});
+    return {productId};
+  }
+  if(action==='UPDATE_PRODUCT'){
+    const productId=code(p.productId);if(!productId)throw new Error('productId is required');
+    const ref=d.collection('products').doc(productId);if(!(await ref.get()).exists)throw new Error('Product not found');
+    await ref.update(normalizeProductPayload(p));return {productId};
+  }
+  if(action==='SET_STOCK'){
+    const productId=code(p.productId);const stockQty=Math.max(0,Math.floor(Number(p.stockQty||0)));
+    const ref=d.collection('products').doc(productId);if(!(await ref.get()).exists)throw new Error('Product not found');
+    await ref.update({stockQty,updatedAt:now()});return {productId,stockQty};
+  }
+  if(action==='ADJUST_STOCK'){
+    const productId=code(p.productId);const delta=Math.trunc(Number(p.delta||0));if(!delta)throw new Error('delta is required');
+    const ref=d.collection('products').doc(productId);
+    let stockQty=0;
+    await d.runTransaction(async tx=>{const snap=await tx.get(ref);if(!snap.exists)throw new Error('Product not found');stockQty=Math.max(0,Number(snap.data()?.stockQty||0)+delta);tx.update(ref,{stockQty,updatedAt:now()})});
+    return {productId,stockQty};
+  }
+  if(action==='DELETE_PRODUCT'){
+    const productId=code(p.productId);if(!productId)throw new Error('productId is required');
+    const ref=d.collection('products').doc(productId);if(!(await ref.get()).exists)throw new Error('Product not found');
+    await ref.delete();return {productId,deleted:true};
+  }
+  if(action==='TOGGLE_PRODUCT'){
+    const productId=code(p.productId);const ref=d.collection('products').doc(productId);const snap=await ref.get();if(!snap.exists)throw new Error('Product not found');
+    const isActive=!Boolean(snap.data()?.isActive);await ref.update({isActive,updatedAt:now()});return {productId,isActive};
+  }
+  throw new Error('Unsupported product action');
+}

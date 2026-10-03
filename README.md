@@ -1,51 +1,114 @@
-# Smark Mart Web + Next.js Backend + Firestore
+# Smark Mart — Firestore + Next.js Admin CRUD
 
-This project contains the responsive Admin console, Dispatch console, secure Next.js API backend, Firestore transaction logic, and the XLSX -> Firestore migration utility.
+This package contains the Admin/Dispatch web app, secure Next.js backend, Firestore rules/indexes, the current Smart Market.xlsx seed workbook, and a root `index.js` importer.
 
-## Architecture
-- Mobile app: Firebase Anonymous Authentication only.
-- Mobile sends its Firebase ID token to this Next.js backend.
-- Backend verifies the token with Firebase Admin SDK.
-- All cart/order/payment/trolley state transitions happen server-side in Firestore transactions.
-- Admin does **not** use Firebase Authentication. `/` uses a simple username/password stored in server environment variables and creates an HTTP-only signed session cookie.
-- Firestore rules deny direct client access; Admin SDK backend is the only database writer.
+## What is included
 
-## Firebase preparation
-1. Create Firebase project.
-2. Enable Firestore in Native mode.
-3. Authentication -> enable **Anonymous** (for mobile users).
-4. Project Settings -> Service Accounts -> generate a private key for the backend/migration.
-5. Copy `.env.example` to `.env.local` and fill values.
-6. Deploy `firestore.rules` and `firestore.indexes.json` with Firebase CLI if desired.
+- `index.js` — one-command XLSX -> Firestore importer
+- `Smart Market.xlsx` — current source workbook
+- `app/admin` — live trolley/order dashboard
+- `app/admin/products` — Product Master CRUD
+- `app/dispatch` — payment-safe dispatch/return screen
+- `app/api/*` — server-side APIs
+- `lib/smart-market.ts` — trolley/cart/order/payment/dispatch + product CRUD logic
+- `firestore.rules` — blocks direct client access; backend uses Firebase Admin SDK
+- `firestore.indexes.json` — required query indexes
 
-## Import the existing Smart Market workbook
-The exact workbook used while building is included at `seed/Smart Market.xlsx`.
+## Product CRUD included
+
+Admin -> Products supports:
+- View/search products
+- Add product
+- Edit product/category/pack/price/barcode/scan code
+- Update stock quantity directly through the edit form
+- Stock + / - buttons
+- Set reorder level
+- Activate/deactivate
+- Delete product
+
+The customer API already supports cart quantity changes through `CHANGE_QTY`.
+
+## 1. Install
 
 ```bash
 npm install
-node --env-file=.env.local scripts/migrate-from-xlsx.mjs "seed/Smart Market.xlsx"
 ```
 
-It imports Products, Trolleys, Users (as legacyUsers), Settings and any existing Sessions, CartItems, Orders, Payments, DispatchLog, AuditLog. It is safe to re-run because master document IDs are deterministic and writes use merge mode.
+## 2. Firebase Admin credentials
 
-## Run
+For Next.js/Vercel, configure:
+
+```env
+FIREBASE_PROJECT_ID=smart-mart-82a7a
+FIREBASE_CLIENT_EMAIL=YOUR_SERVICE_ACCOUNT_CLIENT_EMAIL
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=YOUR_PASSWORD
+ADMIN_SESSION_SECRET=AT_LEAST_32_RANDOM_CHARACTERS
+NEXT_PUBLIC_STORE_NAME=Smark Mart
+```
+
+`google-services.json` is Android client configuration and is NOT a Firebase Admin service-account credential.
+
+## 3. Import current Excel data to Firestore
+
+The easiest local method is to put the Firebase **service account** JSON beside `index.js` as:
+
+`serviceAccountKey.json`
+
+Do NOT commit that file.
+
+Then run:
+
+```bash
+npm run seed
+```
+
+or:
+
+```bash
+node index.js "Smart Market.xlsx"
+```
+
+Alternative supported credential methods are documented at the top of `index.js`.
+
+The importer is idempotent for master data. It imports:
+- Products
+- Trolleys
+- Users -> `legacyUsers`
+- Settings
+- Sessions
+- CartItems -> `sessions/{sessionId}/cart/{productId}`
+- Orders
+- Payments
+- DispatchLog
+- AuditLog
+- Active session locks
+
+It also writes import metadata to `_meta/smarkMart`.
+
+## 4. Run locally
+
 ```bash
 npm run dev
 ```
-- `/` admin login
-- `/admin` admin dashboard + payment confirmation
-- `/dispatch` dispatch / trolley return
-- `/api/customer/action` mobile backend
 
-## Deployment
-Works well on Vercel or any Node host supporting Next.js. Add every `.env.example` value to the deployment environment. Use a strong `ADMIN_PASSWORD` and `ADMIN_SESSION_SECRET`.
+Open `http://localhost:3000` and log in with the `ADMIN_USERNAME` / `ADMIN_PASSWORD` values.
 
-## Production notes already enforced
-- server-side Firebase token verification
-- HTTP-only signed admin cookie
-- no direct Firestore client writes
-- atomic trolley/session/order state transitions
-- server-side price/total calculation
-- unpaid dispatch blocking
-- cart quantity guard
-- closed-session lock
+Admin product page:
+
+`/admin/products`
+
+## 5. Deploy Firestore rules/indexes
+
+If Firebase CLI is installed and the project is selected:
+
+```bash
+firebase deploy --only firestore:rules,firestore:indexes
+```
+
+## 6. Vercel
+
+Push this folder to GitHub, import it in Vercel, and add the server environment variables from step 2.
+
+Never upload `serviceAccountKey.json` to GitHub.
