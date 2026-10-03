@@ -1,0 +1,23 @@
+name: Web Build Check
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - run: npm run build
+        env:
+          FIREBASE_PROJECT_ID: test-project
+          FIREBASE_CLIENT_EMAIL: test@example.com
+          FIREBASE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nTEST\n-----END PRIVATE KEY-----\n"
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: test-only-password
+          ADMIN_SESSION_SECRET: 12345678901234567890123456789012
