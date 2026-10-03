@@ -407,38 +407,38 @@ export default function DispatchPage() {
     paymentStatus !== 'PAID';
 
   return (
-    <main className="shell">
-      <header>
-        <div className="headerBrand">
+    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
+      <header className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div className="flex items-center gap-3">
           <img
-            className="brandIcon"
+            className="h-12 w-12 rounded-xl object-cover"
             src="/smark-mart-icon.png"
             alt="Smark Mart"
           />
 
           <div>
-            <h1>
+            <h1 className="text-xl font-black tracking-tight text-slate-950 sm:text-2xl">
               Smark Mart Dispatch
             </h1>
 
-            <p>
+            <p className="mt-1 text-sm text-slate-500">
               Scan • Validate •
               Dispatch • Return
             </p>
           </div>
         </div>
 
-        <nav>
-          <a href="/admin">
+        <nav className="flex flex-wrap items-center gap-2">
+          <a className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950" href="/admin">
             Admin
           </a>
 
-          <a href="/admin/products">
+          <a className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950" href="/admin/products">
             Products
           </a>
 
           <a
-            className="active"
+            className="rounded-lg bg-teal-50 px-3 py-2 text-sm font-bold text-teal-800"
             href="/dispatch"
           >
             Dispatch
@@ -446,18 +446,18 @@ export default function DispatchPage() {
         </nav>
       </header>
 
-      <section className="dispatchHero">
-        <div className="dispatchHeroCopy">
-          <span className="dispatchEyebrow">
+      <section className="mt-1 flex flex-col items-stretch justify-between gap-6 rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-teal-900 p-5 text-white shadow-xl shadow-slate-900/10 sm:p-7 lg:flex-row lg:items-center">
+        <div className="max-w-2xl">
+          <span className="mb-2 inline-block text-[10px] font-black tracking-[0.2em] text-teal-300">
             EXIT GATE
           </span>
 
-          <h2>
+          <h2 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl">
             Scan trolley to validate
             checkout
           </h2>
 
-          <p>
+          <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-300">
             The scanner checks payment
             and order status before the
             trolley can leave the store.
@@ -465,11 +465,11 @@ export default function DispatchPage() {
         </div>
 
         <button
-          className="scannerLaunch"
+          className="flex min-w-60 items-center gap-3 rounded-2xl border border-white/15 bg-white/10 p-3.5 text-left text-white shadow-sm backdrop-blur transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-55"
           onClick={openScanner}
           disabled={busy}
         >
-          <span className="scannerLaunchIcon">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-teal-500 text-2xl">
             ▣
           </span>
 
@@ -485,21 +485,21 @@ export default function DispatchPage() {
         </button>
       </section>
 
-      <section className="dispatchCard dispatchControlCard">
-        <div className="dispatchInputHeader">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
           <div>
-            <h3>
+            <h3 className="font-bold text-slate-900">
               Trolley Lookup
             </h3>
 
-            <p>
+            <p className="mt-1 text-xs text-slate-500">
               Scan using camera or enter
               the trolley code manually.
             </p>
           </div>
 
           {lastScanned && (
-            <span className="lastScan">
+            <span className="inline-flex rounded-full bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
               Last scan:
               {' '}
               {lastScanned}
@@ -507,8 +507,9 @@ export default function DispatchPage() {
           )}
         </div>
 
-        <div className="dispatchSearchRow">
+        <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-[1fr_auto]">
           <input
+            className="w-full rounded-xl border border-slate-300 px-3.5 py-3.5 text-base uppercase outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10"
             placeholder="SM-TROLLEY-01"
             value={code}
             onChange={(event) =>
@@ -528,6 +529,7 @@ export default function DispatchPage() {
           />
 
           <button
+            className="rounded-xl bg-teal-700 px-5 py-3 font-black text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={
               busy || !code.trim()
             }
@@ -544,70 +546,82 @@ export default function DispatchPage() {
         </div>
 
         {error && (
-          <div className="error">
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800" role="alert">
             {error}
           </div>
         )}
       </section>
 
       {data && (
-        <section className="dispatchResultPanel">
-          <div className="dispatchResultTop">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <span className="resultLabel">
+              <span className="block text-[10px] font-black tracking-[0.16em] text-slate-500">
                 TROLLEY
               </span>
 
-              <h2>
+              <h2 className="mt-1 text-xl font-black text-slate-950">
                 {trolleyId}
               </h2>
             </div>
 
             <span
-              className={`dispatchStatusBadge ${trolleyStatus}`}
+              className={`inline-flex items-center rounded-full px-3 py-2 text-[11px] font-black ${
+                trolleyStatus === 'AVAILABLE'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : trolleyStatus === 'IN_USE'
+                    ? 'bg-blue-100 text-blue-800'
+                    : trolleyStatus === 'PAYMENT_PENDING'
+                      ? 'bg-orange-100 text-orange-800'
+                      : trolleyStatus === 'PAID'
+                        ? 'bg-violet-100 text-violet-800'
+                        : trolleyStatus === 'RETURN_PENDING'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-slate-100 text-slate-700'
+              }`}
             >
               {trolleyStatus}
             </span>
           </div>
 
-          <div className="dispatchStatusGrid">
-            <article>
-              <span>
+          <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <article className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+              <span className="block text-[10px] font-extrabold uppercase text-slate-500">
                 Order
               </span>
 
-              <b>
+              <b className="mt-1.5 block truncate text-sm text-slate-900">
                 {data.order?.orderId ||
                   'No order'}
               </b>
             </article>
 
-            <article>
-              <span>
+            <article className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+              <span className="block text-[10px] font-extrabold uppercase text-slate-500">
                 Payment
               </span>
 
-              <b>
+              <b className="mt-1.5 block truncate text-sm text-slate-900">
                 {paymentStatus}
               </b>
             </article>
 
-            <article>
-              <span>
+            <article className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+              <span className="block text-[10px] font-extrabold uppercase text-slate-500">
                 Order Status
               </span>
 
-              <b>
+              <b className="mt-1.5 block truncate text-sm text-slate-900">
                 {orderStatus}
               </b>
             </article>
 
-            <article>
-              <span>
+            <article className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+              <span className="block text-[10px] font-extrabold uppercase text-slate-500">
                 Total
               </span>
 
-              <b>
+              <b className="mt-1.5 block truncate text-sm text-slate-900">
                 {data.order?.total !=
                 null
                   ? `₹${Number(
@@ -622,17 +636,17 @@ export default function DispatchPage() {
           </div>
 
           {blocked && (
-            <div className="dispatchBlock">
-              <div className="dispatchBlockIcon">
+            <div className="mt-3.5 flex items-center gap-3 rounded-2xl bg-red-50 p-3.5 text-red-800">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-red-600 text-xl font-black text-white">
                 !
               </div>
 
               <div>
-                <b>
+                <b className="block font-black">
                   DO NOT DISPATCH
                 </b>
 
-                <span>
+                <span className="mt-0.5 block text-xs">
                   Payment is still
                   pending.
                 </span>
@@ -641,18 +655,18 @@ export default function DispatchPage() {
           )}
 
           {canDispatch && (
-            <div className="dispatchReady">
+            <div className="mt-3.5 flex flex-col items-stretch justify-between gap-4 rounded-2xl bg-emerald-50 p-3.5 text-emerald-900 sm:flex-row sm:items-center">
               <div>
-                <span>
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-lg font-black">
                   ✓
                 </span>
 
                 <div>
-                  <b>
+                  <b className="block font-bold">
                     Payment verified
                   </b>
 
-                  <small>
+                  <small className="mt-1 block">
                     This trolley is ready
                     for dispatch.
                   </small>
@@ -660,6 +674,7 @@ export default function DispatchPage() {
               </div>
 
               <button
+                className="rounded-xl bg-green-600 px-4 py-3 font-black text-white transition hover:bg-green-700 disabled:opacity-55"
                 disabled={busy}
                 onClick={
                   dispatchOrder
@@ -671,19 +686,19 @@ export default function DispatchPage() {
           )}
 
           {canReturn && (
-            <div className="dispatchReturn">
+            <div className="mt-3.5 flex flex-col items-stretch justify-between gap-4 rounded-2xl bg-orange-50 p-3.5 text-orange-900 sm:flex-row sm:items-center">
               <div>
-                <span>
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-lg font-black">
                   ↩
                 </span>
 
                 <div>
-                  <b>
+                  <b className="block font-bold">
                     Awaiting trolley
                     return
                   </b>
 
-                  <small>
+                  <small className="mt-1 block">
                     Confirm only after
                     the trolley is
                     physically returned.
@@ -692,6 +707,7 @@ export default function DispatchPage() {
               </div>
 
               <button
+                className="rounded-xl bg-amber-600 px-4 py-3 font-black text-white transition hover:bg-amber-700 disabled:opacity-55"
                 disabled={busy}
                 onClick={
                   returnTrolley
@@ -704,7 +720,7 @@ export default function DispatchPage() {
 
           {trolleyStatus ===
             'AVAILABLE' && (
-            <div className="dispatchAvailable">
+            <div className="mt-3.5 rounded-xl bg-green-50 p-3 text-center font-black text-green-800">
               ✓ Trolley available for
               next customer
             </div>
@@ -713,20 +729,21 @@ export default function DispatchPage() {
       )}
 
       {scannerOpen && (
-        <div className="scannerModal">
-          <div className="scannerShell">
-            <div className="scannerTop">
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/90 p-5 backdrop-blur-xl max-sm:p-0">
+          <div className="w-full max-w-xl overflow-hidden rounded-3xl border border-white/10 bg-slate-950 text-white shadow-2xl shadow-black/60 max-sm:flex max-sm:h-dvh max-sm:max-w-none max-sm:flex-col max-sm:rounded-none">
+            <div className="flex items-center justify-between p-4.5">
               <div>
-                <span>
+                <span className="block text-[9px] font-black tracking-[0.18em] text-teal-300">
                   LIVE SCANNER
                 </span>
 
-                <h3>
+                <h3 className="mt-1 text-lg font-bold">
                   Scan trolley
                 </h3>
               </div>
 
               <button
+                className="grid h-10 w-10 place-items-center rounded-xl border border-white/15 bg-white/10 text-2xl text-white transition hover:bg-white/15"
                 onClick={
                   stopScanner
                 }
@@ -736,31 +753,32 @@ export default function DispatchPage() {
               </button>
             </div>
 
-            <div className="scannerViewport">
+            <div className="relative aspect-[4/5] overflow-hidden bg-black max-sm:min-h-0 max-sm:flex-1 max-sm:aspect-auto">
               <video
+                className="h-full w-full object-cover"
                 ref={videoRef}
                 autoPlay
                 muted
                 playsInline
               />
 
-              <div className="scannerShade shadeTop" />
-              <div className="scannerShade shadeBottom" />
-              <div className="scannerShade shadeLeft" />
-              <div className="scannerShade shadeRight" />
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-[28%] bg-slate-950/55" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[28%] bg-slate-950/55" />
+              <div className="pointer-events-none absolute bottom-[28%] left-0 top-[28%] w-[12%] bg-slate-950/55" />
+              <div className="pointer-events-none absolute bottom-[28%] right-0 top-[28%] w-[12%] bg-slate-950/55" />
 
-              <div className="scannerFrame">
-                <i className="corner tl" />
-                <i className="corner tr" />
-                <i className="corner bl" />
-                <i className="corner br" />
+              <div className="absolute bottom-[28%] left-[12%] right-[12%] top-[28%] overflow-hidden">
+                <i className="absolute left-0 top-0 h-[35px] w-[35px] rounded-tl-xl border-l-4 border-t-4 border-solid border-teal-400" />
+                <i className="absolute right-0 top-0 h-[35px] w-[35px] rounded-tr-xl border-r-4 border-t-4 border-solid border-teal-400" />
+                <i className="absolute bottom-0 left-0 h-[35px] w-[35px] rounded-bl-xl border-b-4 border-l-4 border-solid border-teal-400" />
+                <i className="absolute bottom-0 right-0 h-[35px] w-[35px] rounded-br-xl border-b-4 border-r-4 border-solid border-teal-400" />
 
-                <div className="scanLine" />
+                <div className="absolute left-2 right-2 h-0.5 animate-scanner-sweep bg-gradient-to-r from-transparent via-teal-300 to-transparent shadow-[0_0_18px_#2dd4bf]" />
               </div>
             </div>
 
-            <div className="scannerInfo">
-              <div className="scannerPulse" />
+            <div className="flex items-center gap-2.5 px-4.5 py-3.5 text-xs text-slate-300">
+              <div className="h-2 w-2 shrink-0 animate-scanner-pulse rounded-full bg-teal-400" />
 
               <span>
                 {scannerMessage}
@@ -768,7 +786,7 @@ export default function DispatchPage() {
             </div>
 
             <button
-              className="scannerCancel"
+              className="mx-4.5 mb-4.5 rounded-xl bg-slate-900 px-3.5 py-3 font-black text-white transition hover:bg-slate-800"
               onClick={stopScanner}
             >
               Cancel Scanner

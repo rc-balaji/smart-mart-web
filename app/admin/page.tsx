@@ -231,43 +231,44 @@ export default function AdminPage() {
   }
 
   return (
-    <main className="shell">
-      <header>
-        <div className="headerBrand">
+    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
+      <header className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div className="flex items-center gap-3">
           <img
-            className="brandIcon"
+            className="h-12 w-12 rounded-xl object-cover"
             src="/smark-mart-icon.png"
             alt="Smark Mart"
           />
 
           <div>
-            <h1>
+            <h1 className="text-xl font-black tracking-tight text-slate-950 sm:text-2xl">
               Smark Mart Console
             </h1>
 
-            <p>
+            <p className="mt-1 text-sm text-slate-500">
               Live store operations
             </p>
           </div>
         </div>
 
-        <nav>
+        <nav className="flex flex-wrap items-center gap-2">
           <a
-            className="active"
+            className="rounded-lg bg-teal-50 px-3 py-2 text-sm font-bold text-teal-800"
             href="/admin"
           >
             Admin
           </a>
 
-          <a href="/admin/products">
+          <a className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950" href="/admin/products">
             Products
           </a>
 
-          <a href="/dispatch">
+          <a className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950" href="/dispatch">
             Dispatch
           </a>
 
           <button
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             onClick={logout}
           >
             Logout
@@ -275,52 +276,52 @@ export default function AdminPage() {
         </nav>
       </header>
 
-      <section className="stats">
-        <div>
-          <b>
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <b className="block text-2xl font-black text-slate-950">
             {stats.available}
           </b>
 
-          <span>
+          <span className="mt-1 block text-sm font-medium text-slate-500">
             Available
           </span>
         </div>
 
-        <div>
-          <b>{stats.inUse}</b>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <b className="block text-2xl font-black text-slate-950">{stats.inUse}</b>
 
-          <span>
+          <span className="mt-1 block text-sm font-medium text-slate-500">
             In Use
           </span>
         </div>
 
-        <div>
-          <b>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <b className="block text-2xl font-black text-slate-950">
             {stats.pending}
           </b>
 
-          <span>
+          <span className="mt-1 block text-sm font-medium text-slate-500">
             Payment Pending
           </span>
         </div>
 
-        <div>
-          <b>{stats.paid}</b>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <b className="block text-2xl font-black text-slate-950">{stats.paid}</b>
 
-          <span>
+          <span className="mt-1 block text-sm font-medium text-slate-500">
             Paid / Return
           </span>
         </div>
       </section>
 
-      <section className="panel exportPanel">
-        <div className="panelHead">
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2>
+            <h2 className="text-lg font-bold text-slate-900">
               Export Scan Assets
             </h2>
 
-            <p>
+            <p className="mt-1 text-sm leading-relaxed text-slate-500">
               Download master data,
               QR codes and printable
               CODE128 barcodes.
@@ -328,18 +329,18 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <div className="exportGrid">
-          <article className="exportCard">
-            <div className="exportIcon">
+        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <article className="relative grid grid-cols-[auto_1fr] gap-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 sm:p-5">
+            <div className="grid h-12 w-12 place-items-center rounded-xl bg-emerald-50 text-2xl">
               🛒
             </div>
 
             <div>
-              <h3>
+              <h3 className="font-bold text-slate-900">
                 Trolley Package
               </h3>
 
-              <p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">
                 Includes trolleys.csv,
                 QR images and barcode
                 PNG files.
@@ -347,6 +348,7 @@ export default function AdminPage() {
             </div>
 
             <button
+              className="col-span-2 mt-1 w-full rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-55"
               disabled={
                 Boolean(exporting)
               }
@@ -363,17 +365,17 @@ export default function AdminPage() {
             </button>
           </article>
 
-          <article className="exportCard">
-            <div className="exportIcon">
+          <article className="relative grid grid-cols-[auto_1fr] gap-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 sm:p-5">
+            <div className="grid h-12 w-12 place-items-center rounded-xl bg-emerald-50 text-2xl">
               📦
             </div>
 
             <div>
-              <h3>
+              <h3 className="font-bold text-slate-900">
                 Product Package
               </h3>
 
-              <p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">
                 Includes products.csv,
                 QR images and scannable
                 barcode PNG files.
@@ -381,6 +383,7 @@ export default function AdminPage() {
             </div>
 
             <button
+              className="col-span-2 mt-1 w-full rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-55"
               disabled={
                 Boolean(exporting)
               }
@@ -399,44 +402,55 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <section className="panel">
-        <div className="panelHead">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2>Trolleys</h2>
+            <h2 className="text-lg font-bold text-slate-900">Trolleys</h2>
 
-            <p>
+            <p className="mt-1 text-sm text-slate-500">
               Current live status
             </p>
           </div>
 
-          <button onClick={load}>
+          <button className="rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-teal-800" onClick={load}>
             Refresh
           </button>
         </div>
 
-        <div className="trolleyGrid">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {data.trolleys.map(
             (trolley) => (
               <article
+                className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"
                 key={
                   trolley.trolleyId ||
                   trolley.id
                 }
               >
                 <div>
-                  <h3>
+                  <h3 className="truncate font-bold text-slate-900">
                     {trolley.trolleyId ||
                       trolley.id}
                   </h3>
 
-                  <p>
+                  <p className="mt-1 truncate text-xs text-slate-500">
                     {trolley.currentSessionId ||
                       'No active session'}
                   </p>
                 </div>
 
                 <span
-                  className={`badge ${trolley.status}`}
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${
+                    trolley.status === 'AVAILABLE'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : trolley.status === 'IN_USE'
+                        ? 'bg-blue-100 text-blue-800'
+                        : trolley.status === 'PAYMENT_PENDING'
+                          ? 'bg-orange-100 text-orange-800'
+                          : trolley.status === 'PAID'
+                            ? 'bg-violet-100 text-violet-800'
+                            : 'bg-amber-100 text-amber-800'
+                  }`}
                 >
                   {trolley.status}
                 </span>
@@ -446,14 +460,14 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <section className="panel">
-        <div className="panelHead">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="mb-5">
           <div>
-            <h2>
+            <h2 className="text-lg font-bold text-slate-900">
               Recent orders
             </h2>
 
-            <p>
+            <p className="mt-1 text-sm text-slate-500">
               Payments must be
               confirmed before
               dispatch.
@@ -461,17 +475,17 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <div className="tableWrap">
-          <table>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] border-collapse text-left text-sm">
             <thead>
-              <tr>
-                <th>Order</th>
-                <th>Trolley</th>
-                <th>Total</th>
-                <th>Method</th>
-                <th>Payment</th>
-                <th>Status</th>
-                <th />
+              <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-3 font-bold">Order</th>
+                <th className="px-3 py-3 font-bold">Trolley</th>
+                <th className="px-3 py-3 font-bold">Total</th>
+                <th className="px-3 py-3 font-bold">Method</th>
+                <th className="px-3 py-3 font-bold">Payment</th>
+                <th className="px-3 py-3 font-bold">Status</th>
+                <th className="px-3 py-3 font-bold" />
               </tr>
             </thead>
 
@@ -479,11 +493,12 @@ export default function AdminPage() {
               {data.orders.map(
                 (order) => (
                   <tr
+                    className="border-b border-slate-100 text-slate-700 last:border-0"
                     key={
                       order.orderId
                     }
                   >
-                    <td>
+                    <td className="px-3 py-3">
                       <b>
                         {
                           order.orderId
@@ -491,40 +506,41 @@ export default function AdminPage() {
                       </b>
                     </td>
 
-                    <td>
+                    <td className="px-3 py-3">
                       {
                         order.trolleyId
                       }
                     </td>
 
-                    <td>
+                    <td className="px-3 py-3">
                       {money(
                         order.total,
                       )}
                     </td>
 
-                    <td>
+                    <td className="px-3 py-3">
                       {
                         order.paymentMethod
                       }
                     </td>
 
-                    <td>
+                    <td className="px-3 py-3">
                       {
                         order.paymentStatus
                       }
                     </td>
 
-                    <td>
+                    <td className="px-3 py-3">
                       {
                         order.orderStatus
                       }
                     </td>
 
-                    <td>
+                    <td className="px-3 py-3">
                       {order.paymentStatus !==
                       'PAID' ? (
                         <button
+                          className="whitespace-nowrap rounded-lg bg-teal-700 px-3 py-2 text-xs font-bold text-white transition hover:bg-teal-800 disabled:opacity-55"
                           disabled={
                             busy
                           }
@@ -537,7 +553,7 @@ export default function AdminPage() {
                           Confirm Pay
                         </button>
                       ) : (
-                        <span className="good">
+                        <span className="whitespace-nowrap rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
                           Paid ✓
                         </span>
                       )}
