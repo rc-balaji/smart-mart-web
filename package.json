@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@zxing/browser": "^0.1.5",
-    "bwip-js": "^4.6.0",
+    "bwip-js": "^4.11.4",
     "firebase-admin": "^13.5.0",
     "jose": "^6.1.0",
     "jszip": "^3.10.1",
@@ -24,7 +24,6 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "bwip-js": "^4.11.4",
     "@types/node": "^24.5.0",
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19.1.16",
