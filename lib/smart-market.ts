@@ -129,9 +129,13 @@ export async function dispatchAction(action:string,p:Obj){
   const sessionId=trolley.currentSessionId;if(!sessionId)return {trolley,order:null};
   const s=await d.collection('sessions').doc(sessionId).get();const orderId=s.data()?.orderId;
   const o=orderId?await d.collection('orders').doc(orderId).get():null;const order=o?.exists?{orderId:o.id,...o.data()}:null;
-  if(action==='INSPECT')return {trolley,order};
+  const cartSnap=await d.collection('sessions').doc(sessionId).collection('cart').where('active','==',true).get();
+  const items=cartSnap.docs.map(doc=>({cartItemId:doc.id,...doc.data()}));
+  if(action==='INSPECT')return {trolley,order,items};
   if(action==='DISPATCH'){
     if(!o?.exists||o.data()?.paymentStatus!=='PAID'||o.data()?.orderStatus!=='READY_FOR_DISPATCH')throw new Error('Do not dispatch: payment is not confirmed');
+    const checkedItemIds=Array.isArray(p.checkedItemIds)?p.checkedItemIds.map(code):[];
+    if(!items.length||items.some(item=>!checkedItemIds.includes(String(item.cartItemId))))throw new Error('Check every trolley item before dispatch');
     await d.runTransaction(async tx=>{tx.update(o.ref,{orderStatus:'DISPATCHED',dispatchAt:now(),updatedAt:now()});tx.update(s.ref,{status:'DISPATCHED',updatedAt:now()});tx.update(d.collection('trolleys').doc(trolley.id),{status:'RETURN_PENDING',updatedAt:now()});tx.set(d.collection('dispatchLog').doc(id('DSP')),{orderId:o.id,trolleyId:trolley.trolleyId,status:'DISPATCHED',createdAt:now()});});
     return {ok:true,orderId:o.id,trolleyId:trolley.trolleyId};
   }

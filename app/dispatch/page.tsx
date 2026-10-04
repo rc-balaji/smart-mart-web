@@ -21,6 +21,16 @@ type DispatchData = {
 
   trolleyId?: string;
 
+  items?: {
+    cartItemId: string;
+    productId?: string;
+    name?: string;
+    pack?: string;
+    qty?: number;
+    unitPrice?: number;
+    lineTotal?: number;
+  }[];
+
   order?: {
     orderId?: string;
     paymentStatus?: string;
@@ -57,6 +67,9 @@ export default function DispatchPage() {
   const [lastScanned, setLastScanned] =
     useState('');
 
+  const [checkedItemIds, setCheckedItemIds] =
+    useState<string[]>([]);
+
   const videoRef =
     useRef<HTMLVideoElement | null>(
       null,
@@ -73,6 +86,7 @@ export default function DispatchPage() {
   async function callAction(
     action: string,
     trolleyCode?: string,
+    extraPayload: Record<string, unknown> = {},
   ) {
     const finalCode = (
       trolleyCode || code
@@ -104,6 +118,7 @@ export default function DispatchPage() {
             payload: {
               trolleyCode:
                 finalCode,
+              ...extraPayload,
             },
           }),
         },
@@ -128,6 +143,7 @@ export default function DispatchPage() {
 
       if (action === 'INSPECT') {
         setData(json.data);
+        setCheckedItemIds([]);
       }
 
       return json.data;
@@ -181,6 +197,8 @@ export default function DispatchPage() {
     const result =
       await callAction(
         'DISPATCH',
+        undefined,
+        { checkedItemIds },
       );
 
     if (result) {
@@ -406,6 +424,15 @@ export default function DispatchPage() {
     Boolean(data?.order) &&
     paymentStatus !== 'PAID';
 
+  const items =
+    data?.items || [];
+
+  const allItemsChecked =
+    items.length > 0 &&
+    items.every((item) =>
+      checkedItemIds.includes(item.cartItemId),
+    );
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
@@ -438,10 +465,10 @@ export default function DispatchPage() {
           </a>
 
           <a
-            className="rounded-lg bg-teal-50 px-3 py-2 text-sm font-bold text-teal-800"
-            href="/dispatch"
+            className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+            href="/admin/barcodes"
           >
-            Dispatch
+            Barcodes
           </a>
         </nav>
       </header>
@@ -635,6 +662,69 @@ export default function DispatchPage() {
             </article>
           </div>
 
+          <div className="mt-4 rounded-2xl border border-slate-200 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="font-bold text-slate-900">
+                  Trolley bill items
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Check each item against the trolley before dispatch.
+                </p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">
+                {checkedItemIds.length}/{items.length} checked
+              </span>
+            </div>
+
+            {items.length ? (
+              <ul className="mt-3 divide-y divide-slate-100">
+                {items.map((item) => {
+                  const checked = checkedItemIds.includes(item.cartItemId);
+                  return (
+                    <li
+                      className="flex items-center gap-3 py-3"
+                      key={item.cartItemId}
+                    >
+                      <input
+                        className="h-5 w-5 shrink-0 accent-teal-700"
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) =>
+                          setCheckedItemIds((current) =>
+                            event.target.checked
+                              ? [...current, item.cartItemId]
+                              : current.filter((id) => id !== item.cartItemId),
+                          )
+                        }
+                        aria-label={`Verify ${item.name || item.productId || 'item'}`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <b className="block truncate text-sm text-slate-900">
+                          {item.name || item.productId || 'Product'}
+                        </b>
+                        <span className="mt-0.5 block text-xs text-slate-500">
+                          {item.productId || 'No product ID'}
+                          {item.pack ? ` • ${item.pack}` : ''}
+                        </span>
+                      </div>
+                      <span className="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1.5 text-sm font-black text-slate-800">
+                        × {Number(item.qty || 0)}
+                      </span>
+                      <b className="w-20 shrink-0 text-right text-sm text-slate-900">
+                        ₹{Number(item.lineTotal || 0).toLocaleString('en-IN')}
+                      </b>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="mt-3 rounded-xl bg-slate-50 px-3 py-4 text-sm text-slate-500">
+                No active bill items for this trolley.
+              </p>
+            )}
+          </div>
+
           {blocked && (
             <div className="mt-3.5 flex items-center gap-3 rounded-2xl bg-red-50 p-3.5 text-red-800">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-red-600 text-xl font-black text-white">
@@ -675,7 +765,7 @@ export default function DispatchPage() {
 
               <button
                 className="rounded-xl bg-green-600 px-4 py-3 font-black text-white transition hover:bg-green-700 disabled:opacity-55"
-                disabled={busy}
+                disabled={busy || !allItemsChecked}
                 onClick={
                   dispatchOrder
                 }

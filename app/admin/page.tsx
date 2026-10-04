@@ -263,8 +263,8 @@ export default function AdminPage() {
             Products
           </a>
 
-          <a className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950" href="/dispatch">
-            Dispatch
+          <a className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950" href="/admin/barcodes">
+            Barcodes
           </a>
 
           <button

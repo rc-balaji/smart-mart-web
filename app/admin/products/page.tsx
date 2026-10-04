@@ -13,7 +13,7 @@ export default function Products(){
   useEffect(()=>{load('')},[]);
   const stats=useMemo(()=>({total:items.length,active:items.filter(x=>x.isActive!==false).length,low:items.filter(x=>Number(x.stockQty||0)<=Number(x.reorderLevel||0)).length,stock:items.reduce((a,x)=>a+Number(x.stockQty||0),0)}),[items]);
   async function act(action:string,payload:any){setBusy(true);setError('');try{const r=await fetch('/api/admin/products',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,payload})});if(r.status===401){router.replace('/');return}const j=await r.json();if(!j.ok)throw new Error(j.error||'Request failed');await load();return j.data}catch(e:any){setError(e.message)}finally{setBusy(false)}}
-  async function save(e:FormEvent){e.preventDefault();if(!editing)return;const action=editing.productId?'UPDATE_PRODUCT':'CREATE_PRODUCT';const result=await act(action,editing);if(result)setEditing(null)}
+  async function save(e:FormEvent){e.preventDefault();if(!editing)return;const isNew=!editing.productId;const action=isNew?'CREATE_PRODUCT':'UPDATE_PRODUCT';const result=await act(action,editing);if(result){if(isNew)router.push(`/admin/barcodes?product=${encodeURIComponent(result.productId)}`);else setEditing(null)}}
   async function remove(p:Product){if(!confirm(`Delete ${p.name}? Historical orders remain unchanged.`))return;await act('DELETE_PRODUCT',{productId:p.productId})}
   async function stock(p:Product,delta:number){await act('ADJUST_STOCK',{productId:p.productId,delta})}
   async function toggle(p:Product){await act('TOGGLE_PRODUCT',{productId:p.productId})}
@@ -43,8 +43,8 @@ export default function Products(){
           <a className="rounded-lg bg-teal-50 px-3 py-2 text-sm font-bold text-teal-800" href="/admin/products">
             Products
           </a>
-          <a className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950" href="/dispatch">
-            Dispatch
+          <a className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950" href="/admin/barcodes">
+            Barcodes
           </a>
         </nav>
       </header>
