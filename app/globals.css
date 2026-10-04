@@ -4,6 +4,8 @@
   --font-sans: Arial, Helvetica, sans-serif;
   --animate-scanner-sweep: scannerSweep 2s ease-in-out infinite;
   --animate-scanner-pulse: scannerPulse 1.5s infinite;
+  --animate-fade-in: fadeIn 180ms ease-out both;
+  --animate-rise-in: riseIn 240ms ease-out both;
 
   @keyframes scannerSweep {
     0% {
@@ -28,6 +30,100 @@
       box-shadow: 0 0 0 12px rgba(45, 212, 191, 0);
     }
   }
+
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes riseIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.99);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+}
+
+.skeleton-shimmer {
+  @apply relative overflow-hidden bg-slate-200/80;
+}
+
+.skeleton-shimmer::after {
+  @apply absolute inset-0 -translate-x-full;
+  animation: shimmer 1.6s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 65%),
+    transparent
+  );
+  content: "";
+}
+
+main > header,
+main > section,
+main > form {
+  animation: riseIn 240ms ease-out both;
+}
+
+main > section:nth-of-type(2) {
+  animation-delay: 35ms;
+}
+
+main > section:nth-of-type(3) {
+  animation-delay: 70ms;
+}
+
+main > section:nth-of-type(4) {
+  animation-delay: 105ms;
+}
+
+article {
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+article:hover {
+  transform: translateY(-2px);
+  border-color: rgb(203 213 225);
+  box-shadow: 0 8px 20px rgb(15 23 42 / 6%);
+}
+
+a,
+button {
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgb(13 148 136 / 35%);
+  outline-offset: 2px;
 }
 
 body {
@@ -36,4 +132,15 @@ body {
 
 button:disabled {
   @apply cursor-not-allowed opacity-55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

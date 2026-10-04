@@ -114,6 +114,28 @@ export async function adminAction(action:string,p:Obj){
     await d.runTransaction(async tx=>{
       const o=await tx.get(oRef);if(!o.exists)throw new Error('Order not found');const data=o.data()!;
       if(data.paymentStatus==='PAID')return;
+      const cartRef=d.collection('sessions').doc(String(data.sessionId)).collection('cart');
+      const cartSnap=await tx.get(cartRef.where('active','==',true));
+      if(cartSnap.empty)throw new Error('Cannot confirm payment: the order has no active items');
+      const quantities=new Map<string,number>();
+      cartSnap.docs.forEach(item=>{
+        const productId=code(item.data().productId)||item.id;
+        const quantity=Number(item.data().qty);
+        if(!Number.isSafeInteger(quantity)||quantity<=0)throw new Error(`Invalid quantity for ${productId}`);
+        quantities.set(productId,(quantities.get(productId)||0)+quantity);
+      });
+      const productRefs=[...quantities.keys()].map(productId=>d.collection('products').doc(productId));
+      const productSnaps=await Promise.all(productRefs.map(ref=>tx.get(ref)));
+      const stockUpdates=productSnaps.map((product,index)=>{
+        const productId=productRefs[index]!.id;
+        if(!product.exists)throw new Error(`Cannot confirm payment: product ${productId} was not found`);
+        const currentStock=Number(product.data()?.stockQty);
+        const quantity=quantities.get(productId)!;
+        if(!Number.isSafeInteger(currentStock)||currentStock<0)throw new Error(`Cannot confirm payment: ${productId} has an invalid stock quantity`);
+        if(currentStock<quantity)throw new Error(`Insufficient stock for ${product.data()?.name||productId}: available ${currentStock}, ordered ${quantity}`);
+        return {ref:product.ref,stockQty:currentStock-quantity};
+      });
+      stockUpdates.forEach(({ref,stockQty})=>tx.update(ref,{stockQty,updatedAt:now()}));
       tx.update(oRef,{paymentStatus:'PAID',orderStatus:'READY_FOR_DISPATCH',paidAt:now(),updatedAt:now()});
       tx.update(d.collection('sessions').doc(data.sessionId),{status:'PAID',updatedAt:now()});
       tx.update(d.collection('trolleys').doc(data.trolleyId),{status:'PAID',updatedAt:now()});
@@ -122,6 +144,14 @@ export async function adminAction(action:string,p:Obj){
     return {ok:true};
   }
   throw new Error('Unsupported admin action');
+}
+
+export async function listTrolleyStatuses(){
+  const snapshot=await db().collection('trolleys').orderBy('trolleyId').get();
+  return snapshot.docs.map(doc=>({
+    trolleyId:String(doc.data().trolleyId||doc.id),
+    status:String(doc.data().status||'UNKNOWN'),
+  }));
 }
 
 export async function dispatchAction(action:string,p:Obj){

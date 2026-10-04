@@ -9,10 +9,11 @@ const money=(n:any)=>`₹${Number(n||0).toLocaleString('en-IN',{maximumFractionD
 export default function Products(){
   const router=useRouter();
   const [items,setItems]=useState<Product[]>([]),[search,setSearch]=useState(''),[editing,setEditing]=useState<Product|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
-  async function load(q=search){const r=await fetch('/api/admin/products?q='+encodeURIComponent(q),{cache:'no-store'});if(r.status===401)return router.replace('/');const j=await r.json();if(j.ok)setItems(j.data);else setError(j.error||'Unable to load products')}
-  useEffect(()=>{load('')},[]);
+  const [initialLoading,setInitialLoading]=useState(true),[searching,setSearching]=useState(false),[pendingAction,setPendingAction]=useState(''),[pendingProductId,setPendingProductId]=useState('');
+  async function load(q=search,showLoading=false){if(showLoading)setSearching(true);setError('');try{const r=await fetch('/api/admin/products?q='+encodeURIComponent(q),{cache:'no-store'});if(r.status===401){router.replace('/');return}const j=await r.json();if(!j.ok)throw new Error(j.error||'Unable to load products');setItems(j.data)}catch(e){setError(e instanceof Error?e.message:'Unable to load products')}finally{setInitialLoading(false);if(showLoading)setSearching(false)}}
+  useEffect(()=>{load('',true)},[]);
   const stats=useMemo(()=>({total:items.length,active:items.filter(x=>x.isActive!==false).length,low:items.filter(x=>Number(x.stockQty||0)<=Number(x.reorderLevel||0)).length,stock:items.reduce((a,x)=>a+Number(x.stockQty||0),0)}),[items]);
-  async function act(action:string,payload:any){setBusy(true);setError('');try{const r=await fetch('/api/admin/products',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,payload})});if(r.status===401){router.replace('/');return}const j=await r.json();if(!j.ok)throw new Error(j.error||'Request failed');await load();return j.data}catch(e:any){setError(e.message)}finally{setBusy(false)}}
+  async function act(action:string,payload:any){setBusy(true);setPendingAction(action);setPendingProductId(String(payload.productId||''));setError('');try{const r=await fetch('/api/admin/products',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,payload})});if(r.status===401){router.replace('/');return}const j=await r.json();if(!j.ok)throw new Error(j.error||'Request failed');await load(search);return j.data}catch(e){setError(e instanceof Error?e.message:'Request failed')}finally{setBusy(false);setPendingAction('');setPendingProductId('')}}
   async function save(e:FormEvent){e.preventDefault();if(!editing)return;const isNew=!editing.productId;const action=isNew?'CREATE_PRODUCT':'UPDATE_PRODUCT';const result=await act(action,editing);if(result){if(isNew)router.push(`/admin/barcodes?product=${encodeURIComponent(result.productId)}`);else setEditing(null)}}
   async function remove(p:Product){if(!confirm(`Delete ${p.name}? Historical orders remain unchanged.`))return;await act('DELETE_PRODUCT',{productId:p.productId})}
   async function stock(p:Product,delta:number){await act('ADJUST_STOCK',{productId:p.productId,delta})}
@@ -90,26 +91,47 @@ export default function Products(){
             className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            onKeyDown={(event) => event.key === 'Enter' && load()}
+            onKeyDown={(event) => event.key === 'Enter' && load(search,true)}
             placeholder="Search product, category, code..."
           />
           <button
-            className="rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-teal-800"
-            onClick={() => load()}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-teal-800 disabled:opacity-55"
+            disabled={searching}
+            onClick={() => load(search,true)}
           >
-            Search
+            {searching && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />}
+            {searching ? 'Searching…' : 'Search'}
           </button>
           <button
             className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             onClick={() => {
               setSearch('');
-              load('');
+              load('',true);
             }}
           >
             Clear
           </button>
         </div>
 
+        {(initialLoading||searching) ? (
+          <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" role="status" aria-label={searching?'Searching products':'Loading products'}>
+            {[0,1,2,3,4,5].map((item)=>(
+              <div className="rounded-2xl border border-slate-200 bg-white p-4" key={item}>
+                <div className="flex items-center gap-3">
+                  <div className="skeleton-shimmer h-12 w-12 rounded-xl" />
+                  <div className="flex-1">
+                    <div className="skeleton-shimmer h-4 w-2/3 rounded" />
+                    <div className="skeleton-shimmer mt-2 h-3 w-1/2 rounded" />
+                  </div>
+                </div>
+                <div className="skeleton-shimmer mt-4 h-16 rounded-xl" />
+                <div className="skeleton-shimmer mt-4 h-8 rounded-lg" />
+              </div>
+            ))}
+            <span className="sr-only">{searching?'Searching products…':'Loading products…'}</span>
+          </div>
+        ) : (
+        <>
         <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {items.map((product) => (
             <article
@@ -165,7 +187,7 @@ export default function Products(){
                     onClick={() => stock(product, -1)}
                     aria-label={`Decrease ${product.name} stock`}
                   >
-                    −
+                    {pendingAction==='ADJUST_STOCK'&&pendingProductId===product.productId?<span className="mx-auto block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-400/40 border-t-slate-600" aria-label="Updating stock" />:'−'}
                   </button>
                   <b className={`min-w-6 text-center ${product.stockQty <= product.reorderLevel ? 'text-red-700' : 'text-slate-900'}`}>
                     {product.stockQty}
@@ -176,26 +198,29 @@ export default function Products(){
                     onClick={() => stock(product, 1)}
                     aria-label={`Increase ${product.name} stock`}
                   >
-                    +
+                    {pendingAction==='ADJUST_STOCK'&&pendingProductId===product.productId?<span className="mx-auto block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-400/40 border-t-slate-600" aria-label="Updating stock" />:'+'}
                   </button>
                 </div>
               </div>
 
               <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4">
                 <button
-                  className="rounded-lg border border-slate-300 px-2 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                  className="rounded-lg border border-slate-300 px-2 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                  disabled={busy}
                   onClick={() => edit(product)}
                 >
                   Edit
                 </button>
                 <button
-                  className="rounded-lg border border-slate-300 px-2 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-300 px-2 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                  disabled={busy}
                   onClick={() => toggle(product)}
                 >
-                  {product.isActive === false ? 'Activate' : 'Disable'}
+                  {pendingAction==='TOGGLE_PRODUCT'&&pendingProductId===product.productId?<span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-400/40 border-t-slate-600" aria-label="Updating product" />:product.isActive === false ? 'Activate' : 'Disable'}
                 </button>
                 <button
-                  className="rounded-lg border border-red-200 px-2 py-2 text-xs font-bold text-red-700 transition hover:bg-red-50"
+                  className="rounded-lg border border-red-200 px-2 py-2 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+                  disabled={busy}
                   onClick={() => remove(product)}
                 >
                   Delete
@@ -209,17 +234,19 @@ export default function Products(){
             No products found.
           </div>
         )}
+        </>
+        )}
       </section>
 
       {editing && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-sm"
+          className="animate-fade-in fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-sm"
           onMouseDown={(event) => {
             if (event.currentTarget === event.target) setEditing(null);
           }}
         >
           <form
-            className="my-auto w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-7"
+            className="animate-rise-in my-auto w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-7"
             onSubmit={save}
           >
             <div className="mb-5 flex items-start justify-between gap-4">
@@ -291,10 +318,11 @@ export default function Products(){
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-55"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-55"
                 disabled={busy}
                 type="submit"
               >
+                {busy && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />}
                 {busy ? 'Saving...' : 'Save Product'}
               </button>
             </div>

@@ -48,6 +48,7 @@ export default function BarcodesPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<BarcodeTarget | null>(null);
   const [loading, setLoading] = useState(true);
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState('');
   const [barcodeError, setBarcodeError] = useState('');
@@ -85,6 +86,7 @@ export default function BarcodesPage() {
         if (newProductId) {
           const product = loadedProducts.find((item) => item.productId === newProductId);
           if (product) {
+            setBarcodeLoading(true);
             setSelected({
               label: product.name || product.productId || 'Product',
               value: productBarcode(product),
@@ -166,6 +168,7 @@ export default function BarcodesPage() {
 
   function openProductBarcode(product: Product) {
     setBarcodeError('');
+    setBarcodeLoading(true);
     setSelected({
       label: product.name || product.productId || 'Product',
       value: productBarcode(product),
@@ -180,6 +183,7 @@ export default function BarcodesPage() {
 
   function openTrolleyBarcode(trolley: Trolley) {
     setBarcodeError('');
+    setBarcodeLoading(true);
     setSelected({
       label: trolley.trolleyId || trolley.id || 'Trolley',
       value: trolleyBarcode(trolley),
@@ -233,7 +237,23 @@ export default function BarcodesPage() {
       )}
 
       {loading ? (
-        <p className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Loading barcode details…</p>
+        <div className="space-y-6" role="status" aria-label="Loading barcode details">
+          {[0, 1].map((section) => (
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" key={section}>
+              <div className="skeleton-shimmer h-6 w-36 rounded-lg" />
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {[0, 1, 2].map((card) => (
+                  <div className="rounded-xl border border-slate-200 p-4" key={card}>
+                    <div className="skeleton-shimmer h-4 w-2/3 rounded" />
+                    <div className="skeleton-shimmer mt-3 h-3 w-1/2 rounded" />
+                    <div className="skeleton-shimmer mt-4 h-9 w-full rounded-lg" />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+          <span className="sr-only">Loading products and trolley details…</span>
+        </div>
       ) : (
         <>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -320,12 +340,12 @@ export default function BarcodesPage() {
 
       {selected && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-sm"
+          className="animate-fade-in fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-sm"
           onMouseDown={(event) => {
             if (event.currentTarget === event.target) setSelected(null);
           }}
         >
-          <section className="my-auto w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-7" role="dialog" aria-modal="true" aria-labelledby="barcode-title">
+          <section className="animate-rise-in my-auto w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-7" role="dialog" aria-modal="true" aria-labelledby="barcode-title" aria-busy={barcodeLoading || downloading}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 id="barcode-title" className="text-xl font-black text-slate-950">{selected.label}</h2>
@@ -348,12 +368,24 @@ export default function BarcodesPage() {
               <div className="break-all font-mono text-xs text-slate-800">Barcode value: {selected.value}</div>
             </dl>
 
-            <div className="mt-4 flex min-h-36 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-4">
+            <div className="relative mt-4 flex min-h-36 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-4" aria-live="polite">
+              {barcodeLoading && (
+                <div className="absolute inset-4 flex flex-col items-center justify-center gap-3" role="status">
+                  <div className="skeleton-shimmer h-16 w-full max-w-sm rounded-lg" />
+                  <div className="skeleton-shimmer h-3 w-36 rounded" />
+                  <span className="sr-only">Generating barcode…</span>
+                </div>
+              )}
               <img
-                className="h-auto max-w-full"
+                key={selected.value}
+                className={`h-auto max-w-full transition-opacity duration-300 ${barcodeLoading ? 'opacity-0' : 'opacity-100'}`}
                 src={barcodeUrl}
                 alt={`Barcode for ${selected.label}`}
-                onError={() => setBarcodeError('Could not generate this barcode. Check that its value is supported.')}
+                onLoad={() => setBarcodeLoading(false)}
+                onError={() => {
+                  setBarcodeLoading(false);
+                  setBarcodeError('Could not generate this barcode. Check that its value is supported.');
+                }}
               />
             </div>
 
@@ -368,12 +400,15 @@ export default function BarcodesPage() {
                 Close
               </button>
               <button
-                className="rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-55"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-55"
                 type="button"
                 onClick={downloadBarcode}
-                disabled={downloading || Boolean(barcodeError)}
+                disabled={barcodeLoading || downloading || Boolean(barcodeError)}
               >
-                {downloading ? 'Preparing…' : 'Download PNG'}
+                {(barcodeLoading || downloading) && (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
+                )}
+                {barcodeLoading ? 'Generating barcode…' : downloading ? 'Preparing download…' : 'Download PNG'}
               </button>
             </div>
           </section>

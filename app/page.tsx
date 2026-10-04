@@ -14,19 +14,23 @@ export default function Login() {
     setBusy(true);
     setError('');
 
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
 
-    if (response.ok) {
-      router.push('/admin');
-    } else {
-      setError('Invalid username or password');
+      if (response.ok) {
+        router.push('/admin');
+      } else {
+        setError('Invalid username or password');
+      }
+    } catch {
+      setError('Unable to sign in right now. Check your connection and try again.');
+    } finally {
+      setBusy(false);
     }
-
-    setBusy(false);
   }
 
   return (
@@ -91,9 +95,12 @@ export default function Login() {
         )}
 
         <button
-          className="w-full rounded-xl bg-teal-700 px-4 py-3 font-bold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-55"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 font-bold text-white transition hover:-translate-y-0.5 hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-55"
           disabled={busy}
         >
+          {busy && (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
+          )}
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
 

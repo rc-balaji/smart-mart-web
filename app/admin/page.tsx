@@ -30,26 +30,50 @@ export default function AdminPage() {
   const [busy, setBusy] =
     useState(false);
 
+  const [pendingOrderId, setPendingOrderId] =
+    useState('');
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
+
+  const [dashboardError, setDashboardError] =
+    useState('');
+
   const [exporting, setExporting] =
     useState<string>('');
 
-  async function load() {
-    const response = await fetch(
-      '/api/admin/dashboard',
-      {
-        cache: 'no-store',
-      },
-    );
+  async function load(showFeedback = false) {
+    if (showFeedback) setRefreshing(true);
+    setDashboardError('');
 
-    if (response.status === 401) {
-      router.replace('/');
-      return;
-    }
+    try {
+      const response = await fetch(
+        '/api/admin/dashboard',
+        {
+          cache: 'no-store',
+        },
+      );
 
-    const json = await response.json();
+      if (response.status === 401) {
+        router.replace('/');
+        return;
+      }
 
-    if (json.ok) {
+      const json = await response.json();
+      if (!json.ok) {
+        throw new Error(json.error || 'Unable to load the dashboard.');
+      }
       setData(json.data);
+    } catch (error) {
+      setDashboardError(
+        error instanceof Error ? error.message : 'Unable to load the dashboard.',
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   }
 
@@ -110,6 +134,7 @@ export default function AdminPage() {
     }
 
     setBusy(true);
+    setPendingOrderId(orderId);
 
     try {
       const response = await fetch(
@@ -141,18 +166,27 @@ export default function AdminPage() {
         return;
       }
 
-      await load();
+      await load(true);
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Payment confirmation failed.',
+      );
     } finally {
       setBusy(false);
+      setPendingOrderId('');
     }
   }
 
   async function logout() {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-    });
-
-    router.replace('/');
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+      });
+    } finally {
+      router.replace('/');
+    }
   }
 
   async function downloadExport(
@@ -276,11 +310,17 @@ export default function AdminPage() {
         </nav>
       </header>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {dashboardError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800" role="alert">
+          {dashboardError}
+        </div>
+      )}
+
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-busy={loading}>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <b className="block text-2xl font-black text-slate-950">
-            {stats.available}
-          </b>
+          {loading ? <div className="skeleton-shimmer h-8 w-14 rounded" /> : (
+            <b className="block text-2xl font-black text-slate-950">{stats.available}</b>
+          )}
 
           <span className="mt-1 block text-sm font-medium text-slate-500">
             Available
@@ -288,7 +328,9 @@ export default function AdminPage() {
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <b className="block text-2xl font-black text-slate-950">{stats.inUse}</b>
+          {loading ? <div className="skeleton-shimmer h-8 w-14 rounded" /> : (
+            <b className="block text-2xl font-black text-slate-950">{stats.inUse}</b>
+          )}
 
           <span className="mt-1 block text-sm font-medium text-slate-500">
             In Use
@@ -296,9 +338,9 @@ export default function AdminPage() {
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <b className="block text-2xl font-black text-slate-950">
-            {stats.pending}
-          </b>
+          {loading ? <div className="skeleton-shimmer h-8 w-14 rounded" /> : (
+            <b className="block text-2xl font-black text-slate-950">{stats.pending}</b>
+          )}
 
           <span className="mt-1 block text-sm font-medium text-slate-500">
             Payment Pending
@@ -306,7 +348,9 @@ export default function AdminPage() {
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <b className="block text-2xl font-black text-slate-950">{stats.paid}</b>
+          {loading ? <div className="skeleton-shimmer h-8 w-14 rounded" /> : (
+            <b className="block text-2xl font-black text-slate-950">{stats.paid}</b>
+          )}
 
           <span className="mt-1 block text-sm font-medium text-slate-500">
             Paid / Return
@@ -348,7 +392,7 @@ export default function AdminPage() {
             </div>
 
             <button
-              className="col-span-2 mt-1 w-full rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-55"
+              className="col-span-2 mt-1 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-55"
               disabled={
                 Boolean(exporting)
               }
@@ -358,6 +402,9 @@ export default function AdminPage() {
                 )
               }
             >
+              {exporting === 'trolleys' && (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
+              )}
               {exporting ===
               'trolleys'
                 ? 'Preparing ZIP…'
@@ -383,7 +430,7 @@ export default function AdminPage() {
             </div>
 
             <button
-              className="col-span-2 mt-1 w-full rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-55"
+              className="col-span-2 mt-1 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-55"
               disabled={
                 Boolean(exporting)
               }
@@ -393,6 +440,9 @@ export default function AdminPage() {
                 )
               }
             >
+              {exporting === 'products' && (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
+              )}
               {exporting ===
               'products'
                 ? 'Preparing ZIP…'
@@ -412,11 +462,25 @@ export default function AdminPage() {
             </p>
           </div>
 
-          <button className="rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-teal-800" onClick={load}>
-            Refresh
+          <button className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-teal-800 disabled:opacity-55" onClick={() => load(true)} disabled={refreshing}>
+            {refreshing && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />}
+            {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
 
+        {loading ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Loading trolleys">
+            {[0, 1, 2].map((item) => (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4" key={item}>
+                <div className="skeleton-shimmer h-4 w-36 rounded" />
+                <div className="mt-3 flex justify-between gap-3">
+                  <div className="skeleton-shimmer h-3 w-24 rounded" />
+                  <div className="skeleton-shimmer h-6 w-24 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {data.trolleys.map(
             (trolley) => (
@@ -458,6 +522,7 @@ export default function AdminPage() {
             ),
           )}
         </div>
+        )}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -490,7 +555,17 @@ export default function AdminPage() {
             </thead>
 
             <tbody>
-              {data.orders.map(
+              {loading ? (
+                [0, 1, 2].map((item) => (
+                  <tr className="border-b border-slate-100" key={item}>
+                    {[0, 1, 2, 3, 4, 5, 6].map((cell) => (
+                      <td className="px-3 py-4" key={cell}>
+                        <div className="skeleton-shimmer h-4 w-20 rounded" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : data.orders.map(
                 (order) => (
                   <tr
                     className="border-b border-slate-100 text-slate-700 last:border-0"
@@ -540,7 +615,7 @@ export default function AdminPage() {
                       {order.paymentStatus !==
                       'PAID' ? (
                         <button
-                          className="whitespace-nowrap rounded-lg bg-teal-700 px-3 py-2 text-xs font-bold text-white transition hover:bg-teal-800 disabled:opacity-55"
+                          className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-teal-700 px-3 py-2 text-xs font-bold text-white transition hover:bg-teal-800 disabled:opacity-55"
                           disabled={
                             busy
                           }
@@ -550,7 +625,10 @@ export default function AdminPage() {
                             )
                           }
                         >
-                          Confirm Pay
+                          {pendingOrderId === order.orderId && (
+                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
+                          )}
+                          {pendingOrderId === order.orderId ? 'Confirming…' : 'Confirm Pay'}
                         </button>
                       ) : (
                         <span className="whitespace-nowrap rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
