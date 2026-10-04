@@ -45,6 +45,15 @@ export default function AdminPage() {
   const [exporting, setExporting] =
     useState<string>('');
 
+  const [trolleyDialog, setTrolleyDialog] =
+    useState<{mode:'create'|'status';trolleyId?:string;status?:'AVAILABLE'|'DAMAGED';currentStatus?:string;name?:string;id?:string;reason?:string}|null>(null);
+
+  const [trolleyBusy, setTrolleyBusy] =
+    useState(false);
+
+  const [trolleyActionError, setTrolleyActionError] =
+    useState('');
+
   async function load(showFeedback = false) {
     if (showFeedback) setRefreshing(true);
     setDashboardError('');
@@ -187,6 +196,55 @@ export default function AdminPage() {
     } finally {
       router.replace('/');
     }
+  }
+
+  function addTrolley() {
+    const largest = data.trolleys.reduce((max:number,trolley:any)=>{
+      const match=String(trolley.trolleyId||trolley.id||'').match(/(\d+)$/);
+      return match?Math.max(max,Number(match[1])):max;
+    },0);
+    const suffix=String(largest+1).padStart(3,'0');
+    setTrolleyActionError('');
+    setTrolleyDialog({mode:'create',name:`Trolley ${suffix}`,id:`SM-TROLLEY-${suffix}`});
+  }
+
+  async function saveTrolley() {
+    if(!trolleyDialog)return;
+    setTrolleyBusy(true);
+    setTrolleyActionError('');
+    try{
+      const action=trolleyDialog.mode==='create'?'CREATE_TROLLEY':'SET_TROLLEY_STATUS';
+      const payload=trolleyDialog.mode==='create'
+        ?{name:trolleyDialog.name,trolleyId:trolleyDialog.id}
+        :{trolleyId:trolleyDialog.trolleyId,status:trolleyDialog.status,reason:trolleyDialog.reason};
+      const response=await fetch('/api/admin/action',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({action,payload}),
+      });
+      if(response.status===401){router.replace('/');return}
+      const json=await response.json();
+      if(!json.ok)throw new Error(json.error||'Unable to update trolley.');
+      setTrolleyDialog(null);
+      await load(true);
+    }catch(error){
+      setTrolleyActionError(error instanceof Error?error.message:'Unable to update trolley.');
+    }finally{
+      setTrolleyBusy(false);
+    }
+  }
+
+  function setTrolleyStatus(trolley:any,status:'AVAILABLE'|'DAMAGED'){
+    setTrolleyActionError('');
+    const currentStatus=String(trolley.status||'');
+    setTrolleyDialog({
+      mode:'status',
+      trolleyId:String(trolley.trolleyId||trolley.id),
+      name:String(trolley.name||trolley.trolleyId||trolley.id),
+      currentStatus,
+      status,
+      reason:status==='DAMAGED'?'Equipment damaged':currentStatus==='DAMAGED'?'Repaired and inspected':'Customer left trolley',
+    });
   }
 
   async function downloadExport(
@@ -462,11 +520,22 @@ export default function AdminPage() {
             </p>
           </div>
 
-          <button className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-teal-800 disabled:opacity-55" onClick={() => load(true)} disabled={refreshing}>
-            {refreshing && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />}
-            {refreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-teal-800 disabled:opacity-55" onClick={() => load(true)} disabled={refreshing}>
+              {refreshing && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />}
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
+            <button className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-bold text-teal-800 transition hover:-translate-y-0.5 hover:bg-teal-100" type="button" onClick={addTrolley}>
+              + Add Trolley
+            </button>
+          </div>
         </div>
+
+        {trolleyActionError && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800" role="alert">
+            {trolleyActionError}
+          </div>
+        )}
 
         {loading ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Loading trolleys">
@@ -493,13 +562,12 @@ export default function AdminPage() {
               >
                 <div className="w-full min-w-0 md:flex-1">
                   <h3 className="truncate font-bold text-slate-900">
-                    {trolley.trolleyId ||
-                      trolley.id}
+                    {trolley.name||trolley.trolleyId||
+                  trolley.id}
                   </h3>
 
                   <p className="mt-1 truncate text-xs text-slate-500">
-                    {trolley.currentSessionId ||
-                      'No active session'}
+                    {trolley.trolleyId||trolley.id}
                   </p>
                 </div>
 
@@ -513,17 +581,99 @@ export default function AdminPage() {
                           ? 'bg-orange-100 text-orange-800'
                           : trolley.status === 'PAID'
                             ? 'bg-violet-100 text-violet-800'
-                            : 'bg-amber-100 text-amber-800'
+                            : trolley.status === 'DAMAGED'
+                              ? 'bg-red-100 text-red-800'
+                                : trolley.status === 'MAINTENANCE'
+                                  ? 'bg-orange-100 text-orange-900'
+                                  : trolley.status === 'RETURN_PENDING'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-slate-100 text-slate-700'
                   }`}
                 >
                   {trolley.status}
                 </span>
+                <div className="flex w-full shrink-0 flex-wrap gap-2 md:w-auto md:flex-col">
+                  {(trolley.status==='IN_USE'||trolley.status==='PAYMENT_PENDING')&&(
+                    <>
+                      <button className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-emerald-800 transition hover:bg-emerald-50" type="button" onClick={()=>setTrolleyStatus(trolley,'AVAILABLE')}>
+                        Release
+                      </button>
+                      <button className="rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-amber-800 transition hover:bg-amber-50" type="button" onClick={()=>setTrolleyStatus(trolley,'DAMAGED')}>
+                        Mark Damaged
+                      </button>
+                    </>
+                  )}
+                  {trolley.status==='AVAILABLE'&&(
+                    <button className="rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-amber-800 transition hover:bg-amber-50" type="button" onClick={()=>setTrolleyStatus(trolley,'DAMAGED')}>
+                      Mark Damaged
+                    </button>
+                  )}
+                  {(trolley.status==='DAMAGED'||trolley.status==='MAINTENANCE')&&(
+                    <button className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-emerald-800 transition hover:bg-emerald-50" type="button" onClick={()=>setTrolleyStatus(trolley,'AVAILABLE')}>
+                      {trolley.status==='MAINTENANCE'?'Mark Repaired':'Restore'}
+                    </button>
+                  )}
+                </div>
               </article>
             ),
           )}
         </div>
         )}
       </section>
+
+      {trolleyDialog && (
+        <div className="animate-fade-in fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-sm" onMouseDown={(event)=>{if(event.currentTarget===event.target&&!trolleyBusy)setTrolleyDialog(null)}}>
+          <form className="animate-rise-in my-auto w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-7" onSubmit={(event)=>{event.preventDefault();saveTrolley()}}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black text-slate-950">
+                  {trolleyDialog.mode==='create'?'Add Trolley':trolleyDialog.status==='DAMAGED'?'Mark Trolley Damaged':trolleyDialog.currentStatus==='DAMAGED'?'Restore Trolley':'Release Trolley'}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {trolleyDialog.mode==='create'?'Add a trolley to the live inventory.':`Trolley: ${trolleyDialog.name}`}
+                </p>
+              </div>
+              <button className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 text-xl text-slate-500 transition hover:bg-slate-100" type="button" disabled={trolleyBusy} onClick={()=>setTrolleyDialog(null)} aria-label="Close trolley dialog">×</button>
+            </div>
+
+            {trolleyDialog.mode==='create'?(
+              <div className="mt-5 grid gap-4">
+                <label className="space-y-1.5 text-sm font-semibold text-slate-700">
+                  Trolley Name
+                  <input className="w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10" required maxLength={80} value={trolleyDialog.name||''} onChange={(event)=>setTrolleyDialog({...trolleyDialog,name:event.target.value})} placeholder="Trolley 001" />
+                </label>
+                <label className="space-y-1.5 text-sm font-semibold text-slate-700">
+                  Trolley ID
+                  <input className="w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal uppercase outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10" required minLength={2} maxLength={64} pattern="[A-Za-z0-9_-]+" value={trolleyDialog.id||''} onChange={(event)=>setTrolleyDialog({...trolleyDialog,id:event.target.value.toUpperCase()})} placeholder="Auto-generated ID" />
+                  <small className="block font-normal text-slate-500">Suggested automatically; edit it if your trolley uses a different ID.</small>
+                </label>
+              </div>
+            ):(
+              <div className="mt-5 space-y-4">
+                <div className={`rounded-xl p-4 text-sm leading-relaxed ${trolleyDialog.status==='DAMAGED'?'bg-amber-50 text-amber-900':'bg-emerald-50 text-emerald-900'}`}>
+                  {trolleyDialog.status==='DAMAGED'
+                    ?'This trolley will be marked damaged and hidden from customer use.'
+                    :'This trolley will be made available again.'}
+                  {(trolleyDialog.status==='AVAILABLE'&&['IN_USE','PAYMENT_PENDING'].includes(String(data.trolleys.find((item:any)=>String(item.trolleyId||item.id)===trolleyDialog.trolleyId)?.status)))&&' Its active session and any unpaid order will be cancelled.'}
+                </div>
+                <label className="block space-y-1.5 text-sm font-semibold text-slate-700">
+                  {trolleyDialog.status==='DAMAGED'?'Damage reason':'Release / repair reason'}
+                  <input className="w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10" required={trolleyDialog.status==='DAMAGED'} maxLength={200} value={trolleyDialog.reason||''} onChange={(event)=>setTrolleyDialog({...trolleyDialog,reason:event.target.value})} placeholder="For example: customer left trolley" />
+                </label>
+              </div>
+            )}
+
+            {trolleyActionError&&<p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800" role="alert">{trolleyActionError}</p>}
+            <div className="mt-6 flex flex-col-reverse justify-end gap-2 sm:flex-row">
+              <button className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" type="button" disabled={trolleyBusy} onClick={()=>setTrolleyDialog(null)}>Cancel</button>
+              <button className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-teal-800 disabled:opacity-55" type="submit" disabled={trolleyBusy}>
+                {trolleyBusy&&<span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />}
+                {trolleyBusy?'Saving…':trolleyDialog.mode==='create'?'Add Trolley':trolleyDialog.status==='DAMAGED'?'Confirm Damaged':trolleyDialog.status==='AVAILABLE'?'Set Available':'Save'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="mb-5">

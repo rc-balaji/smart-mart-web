@@ -14,7 +14,7 @@ export default function Products(){
   useEffect(()=>{load('',true)},[]);
   const stats=useMemo(()=>({total:items.length,active:items.filter(x=>x.isActive!==false).length,low:items.filter(x=>Number(x.stockQty||0)<=Number(x.reorderLevel||0)).length,stock:items.reduce((a,x)=>a+Number(x.stockQty||0),0)}),[items]);
   async function act(action:string,payload:any){setBusy(true);setPendingAction(action);setPendingProductId(String(payload.productId||''));setError('');try{const r=await fetch('/api/admin/products',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,payload})});if(r.status===401){router.replace('/');return}const j=await r.json();if(!j.ok)throw new Error(j.error||'Request failed');await load(search);return j.data}catch(e){setError(e instanceof Error?e.message:'Request failed')}finally{setBusy(false);setPendingAction('');setPendingProductId('')}}
-  async function save(e:FormEvent){e.preventDefault();if(!editing)return;const isNew=!editing.productId;const action=isNew?'CREATE_PRODUCT':'UPDATE_PRODUCT';const result=await act(action,editing);if(result){if(isNew)router.push(`/admin/barcodes?product=${encodeURIComponent(result.productId)}`);else setEditing(null)}}
+  async function save(e:FormEvent){e.preventDefault();if(!editing)return;const isNew=!editing.id;const action=isNew?'CREATE_PRODUCT':'UPDATE_PRODUCT';const result=await act(action,editing);if(result){if(isNew)router.push(`/admin/barcodes?product=${encodeURIComponent(result.productId)}`);else setEditing(null)}}
   async function remove(p:Product){if(!confirm(`Delete ${p.name}? Historical orders remain unchanged.`))return;await act('DELETE_PRODUCT',{productId:p.productId})}
   async function stock(p:Product,delta:number){await act('ADJUST_STOCK',{productId:p.productId,delta})}
   async function toggle(p:Product){await act('TOGGLE_PRODUCT',{productId:p.productId})}
@@ -252,10 +252,10 @@ export default function Products(){
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-black text-slate-950">
-                  {editing.productId ? 'Edit Product' : 'Add Product'}
+                  {editing.id ? 'Edit Product' : 'Add Product'}
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  {editing.productId || 'Product ID will be generated automatically'}
+                  {editing.id ? editing.productId : 'Product ID is generated automatically; enter a custom ID if needed.'}
                 </p>
               </div>
               <button
@@ -268,6 +268,16 @@ export default function Products(){
               </button>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label className="space-y-1.5 text-sm font-semibold text-slate-700">
+                Product ID
+                <input
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal outline-none transition focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 disabled:bg-slate-100 disabled:text-slate-500"
+                  value={editing.productId}
+                  onChange={(event) => setEditing({ ...editing, productId: event.target.value.toUpperCase() })}
+                  placeholder="Auto-generated (or enter custom ID)"
+                  disabled={Boolean(editing.id)}
+                />
+              </label>
               <label className="space-y-1.5 text-sm font-semibold text-slate-700">
                 Product Name
                 <input className="w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10" required value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} />

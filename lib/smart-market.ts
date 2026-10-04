@@ -2,6 +2,12 @@ import {FieldValue, Timestamp} from 'firebase-admin/firestore';
 import {db} from './firebase-admin';
 
 type Obj=Record<string,any>;
+export class CustomerActionError extends Error{
+  constructor(public readonly code:string,message:string){
+    super(message);
+    this.name='CustomerActionError';
+  }
+}
 const now=()=>Timestamp.now();
 const code=(v:any)=>String(v??'').trim();
 const money=(n:any)=>Math.round((Number(n||0)+Number.EPSILON)*100)/100;
@@ -37,13 +43,18 @@ async function activeSession(uid:string){
   return found;
 }
 async function buildState(uid:string){
-  const s=await activeSession(uid); if(!s)return {session:null,cart:[],total:0,order:null};
+  const returnSnap=await db().collection('customerTrolleyReturns').doc(uid).get();
+  const returnData=returnSnap.data();
+  const trolleyReturn=returnSnap.exists&&returnData
+    ?{trolleyId:code(returnData.trolleyId),status:code(returnData.status),reasonCode:code(returnData.reasonCode)}
+    :null;
+  const s=await activeSession(uid); if(!s)return {session:null,cart:[],total:0,order:null,...(trolleyReturn?{trolleyReturn}: {})};
   const itemsSnap=await db().collection('sessions').doc(s.id).collection('cart').where('active','==',true).get();
   const cart=itemsSnap.docs.map(d=>({cartItemId:d.id,...d.data()}));
   const total=money(cart.reduce((a:any,x:any)=>a+Number(x.lineTotal||0),0));
   let order:any=null;
   if(s.orderId){const od=await db().collection('orders').doc(s.orderId).get();if(od.exists)order={orderId:od.id,...od.data()}}
-  return {session:{sessionId:s.id,trolleyId:s.trolleyId,status:s.status,orderId:s.orderId||''},cart,total,order};
+  return {session:{sessionId:s.id,trolleyId:s.trolleyId,status:s.status,orderId:s.orderId||''},cart,total,order,...(trolleyReturn?{trolleyReturn}: {})};
 }
 
 export async function customerAction(uid:string,action:string,payload:Obj){
@@ -63,8 +74,134 @@ export async function customerAction(uid:string,action:string,payload:Obj){
       tx.set(d.collection('sessions').doc(sessionId),{uid,trolleyId:trolley.trolleyId,status:'ACTIVE',closed:false,orderId:'',createdAt:now(),updatedAt:now()});
       tx.set(activeRef,{sessionId,createdAt:now(),updatedAt:now()});
       tx.update(tRef,{status:'IN_USE',currentSessionId:sessionId,currentUid:uid,updatedAt:now()});
+      tx.delete(d.collection('customerTrolleyReturns').doc(uid));
     });
     return buildState(uid);
+  }
+
+  if(action==='CANCEL_SESSION'){
+    const reasonCode=code(payload.reasonCode).toUpperCase();
+    if(!['CUSTOMER_CANCELLED','TROLLEY_DAMAGED','CUSTOMER_NEEDS_TO_LEAVE'].includes(reasonCode)){
+      throw new CustomerActionError('SESSION_NOT_CANCELLABLE','Unsupported session cancellation reason');
+    }
+    const expectedSession=await activeSession(uid);
+    if(!expectedSession)throw new CustomerActionError('SESSION_NOT_CANCELLABLE','There is no cancellable active session');
+    let trolleyReturn:Obj|null=null;
+    await d.runTransaction(async tx=>{
+      const lockRef=d.collection('activeSessions').doc(uid);
+      const lock=await tx.get(lockRef);
+      const sessionId=code(lock.data()?.sessionId);
+      if(sessionId!==expectedSession.id)throw new CustomerActionError('SESSION_NOT_CANCELLABLE','The active session has changed; refresh and try again');
+      const sessionRef=sessionId?d.collection('sessions').doc(sessionId):null;
+      const session=sessionRef?await tx.get(sessionRef):null;
+      if(!session?.exists||session.data()?.uid!==uid||session.data()?.closed===true||session.data()?.status!=='ACTIVE'||code(session.data()?.orderId)){
+        throw new CustomerActionError('SESSION_NOT_CANCELLABLE','There is no cancellable active session');
+      }
+      const sessionData=session.data()!;
+      const trolleyQuery=await tx.get(d.collection('trolleys').where('trolleyId','==',code(sessionData.trolleyId)).limit(1));
+      const trolleyRef=!trolleyQuery.empty?trolleyQuery.docs[0]!.ref:d.collection('trolleys').doc(code(sessionData.trolleyId));
+      const trolley=!trolleyQuery.empty?trolleyQuery.docs[0]!:await tx.get(trolleyRef);
+      if(!trolley.exists||trolley.data()?.currentSessionId!==sessionId){
+        throw new CustomerActionError('SESSION_NOT_CANCELLABLE','The active trolley session could not be verified');
+      }
+      const trolleyId=code(trolley.data()?.trolleyId)||trolley.id;
+      trolleyReturn={trolleyId,status:'RETURN_PENDING',reasonCode};
+      tx.update(sessionRef!,{status:'CANCELLED',closed:true,closeReason:reasonCode,closedAt:now(),updatedAt:now()});
+      tx.update(trolleyRef,{status:'RETURN_PENDING',returnReasonCode:reasonCode,returnCustomerUid:uid,returnCreatedAt:now(),updatedAt:now()});
+      tx.delete(lockRef);
+      tx.set(d.collection('customerTrolleyReturns').doc(uid),{...trolleyReturn,updatedAt:now()});
+    });
+    const state=await buildState(uid);
+    return {...state,trolleyReturn};
+  }
+
+  if(action==='SWITCH_TROLLEY'){
+    const newTrolleyCode=code(payload.newTrolleyCode);
+    const reasonCode=code(payload.reasonCode).toUpperCase();
+    if(!newTrolleyCode)throw new CustomerActionError('TROLLEY_UNAVAILABLE','New trolley code is required');
+    if(!['TROLLEY_DAMAGED','CUSTOMER_CHANGED_TROLLEY'].includes(reasonCode)){
+      throw new CustomerActionError('SESSION_NOT_CANCELLABLE','Unsupported trolley-switch reason');
+    }
+    const newTrolley=await trolleyByCode(newTrolleyCode);
+    if(!newTrolley)throw new CustomerActionError('TROLLEY_UNAVAILABLE','Requested trolley is not available');
+    const expectedSession=await activeSession(uid);
+    if(!expectedSession)throw new CustomerActionError('SESSION_NOT_CANCELLABLE','There is no active session that can switch trolleys');
+    let trolleyReturn:Obj|null=null;
+    await d.runTransaction(async tx=>{
+      const lockRef=d.collection('activeSessions').doc(uid);
+      const lock=await tx.get(lockRef);
+      const sessionId=code(lock.data()?.sessionId);
+      if(sessionId!==expectedSession.id)throw new CustomerActionError('SESSION_NOT_CANCELLABLE','The active session has changed; refresh and try again');
+      const sessionRef=sessionId?d.collection('sessions').doc(sessionId):null;
+      const session=sessionRef?await tx.get(sessionRef):null;
+      if(!session?.exists||session.data()?.uid!==uid||session.data()?.closed===true||session.data()?.status!=='ACTIVE'||code(session.data()?.orderId)){
+        throw new CustomerActionError('SESSION_NOT_CANCELLABLE','There is no active session that can switch trolleys');
+      }
+      const sessionData=session.data()!;
+      const oldTrolleyQuery=await tx.get(d.collection('trolleys').where('trolleyId','==',code(sessionData.trolleyId)).limit(1));
+      const oldTrolleyRef=!oldTrolleyQuery.empty?oldTrolleyQuery.docs[0]!.ref:d.collection('trolleys').doc(code(sessionData.trolleyId));
+      const oldTrolley=!oldTrolleyQuery.empty?oldTrolleyQuery.docs[0]!:await tx.get(oldTrolleyRef);
+      const newTrolleyRef=d.collection('trolleys').doc(newTrolley.id);
+      const [verifiedNewTrolley]=await Promise.all([tx.get(newTrolleyRef)]);
+      if(!oldTrolley.exists||oldTrolley.data()?.currentSessionId!==sessionId||oldTrolley.data()?.status!=='IN_USE'){
+        throw new CustomerActionError('SESSION_NOT_CANCELLABLE','The current trolley session could not be verified');
+      }
+      if(!verifiedNewTrolley.exists||verifiedNewTrolley.data()?.status!=='AVAILABLE'||newTrolleyRef.path===oldTrolleyRef.path){
+        throw new CustomerActionError('TROLLEY_UNAVAILABLE','Requested trolley is not available');
+      }
+      const oldTrolleyId=code(oldTrolley.data()?.trolleyId)||oldTrolley.id;
+      const newTrolleyId=code(verifiedNewTrolley.data()?.trolleyId)||verifiedNewTrolley.id;
+      trolleyReturn={trolleyId:oldTrolleyId,status:'RETURN_PENDING',reasonCode};
+      tx.update(oldTrolleyRef,{status:'RETURN_PENDING',currentSessionId:'',currentUid:'',returnReasonCode:reasonCode,returnCustomerUid:uid,returnCreatedAt:now(),updatedAt:now()});
+      tx.update(newTrolleyRef,{status:'IN_USE',currentSessionId:sessionId,currentUid:uid,updatedAt:now()});
+      tx.update(sessionRef!,{trolleyId:newTrolleyId,updatedAt:now()});
+      tx.set(d.collection('customerTrolleyReturns').doc(uid),{...trolleyReturn,updatedAt:now()});
+    });
+    const state=await buildState(uid);
+    return {...state,trolleyReturn};
+  }
+
+  if(action==='CANCEL_ORDER'){
+    const orderId=code(payload.orderId);
+    const reasonCode=code(payload.reasonCode).toUpperCase();
+    if(!orderId||!['CUSTOMER_CANCELLED','TROLLEY_DAMAGED','CUSTOMER_NEEDS_TO_LEAVE'].includes(reasonCode)){
+      throw new CustomerActionError('ORDER_NOT_CANCELLABLE','Order ID and a supported cancellation reason are required');
+    }
+    let trolleyReturn:Obj|null=null;
+    await d.runTransaction(async tx=>{
+      const orderRef=d.collection('orders').doc(orderId);
+      const order=await tx.get(orderRef);
+      if(!order.exists||order.data()?.uid!==uid){
+        throw new CustomerActionError('ORDER_NOT_CANCELLABLE','Order not found or does not belong to this customer');
+      }
+      const orderData=order.data()!;
+      if(code(orderData.paymentStatus).toUpperCase()==='PAID'){
+        throw new CustomerActionError('PAYMENT_ALREADY_CONFIRMED','Payment is confirmed. Contact store staff to resolve this order');
+      }
+      if(code(orderData.paymentStatus).toUpperCase()!=='PENDING'){
+        throw new CustomerActionError('ORDER_NOT_CANCELLABLE','This order is being processed and cannot be cancelled');
+      }
+      if(code(orderData.orderStatus).toUpperCase()!=='PAYMENT_PENDING'){
+        throw new CustomerActionError('ORDER_NOT_CANCELLABLE','This order can no longer be cancelled');
+      }
+      const sessionRef=d.collection('sessions').doc(code(orderData.sessionId));
+      const session=await tx.get(sessionRef);
+      const trolleyQuery=await tx.get(d.collection('trolleys').where('trolleyId','==',code(orderData.trolleyId)).limit(1));
+      const trolleyRef=!trolleyQuery.empty?trolleyQuery.docs[0]!.ref:d.collection('trolleys').doc(code(orderData.trolleyId));
+      const trolley=!trolleyQuery.empty?trolleyQuery.docs[0]!:await tx.get(trolleyRef);
+      if(!session.exists||session.data()?.uid!==uid||session.data()?.closed===true||session.data()?.orderId!==orderId||!trolley.exists||trolley.data()?.currentSessionId!==session.id){
+        throw new CustomerActionError('ORDER_NOT_CANCELLABLE','The order session or trolley could not be verified');
+      }
+      const trolleyId=code(trolley.data()?.trolleyId)||trolley.id;
+      trolleyReturn={trolleyId,status:'RETURN_PENDING',reasonCode};
+      tx.update(orderRef,{orderStatus:'CANCELLED',cancelReason:reasonCode,cancelledAt:now(),updatedAt:now()});
+      tx.update(sessionRef,{status:'CANCELLED',closed:true,closeReason:reasonCode,closedAt:now(),updatedAt:now()});
+      tx.update(trolleyRef,{status:'RETURN_PENDING',returnReasonCode:reasonCode,returnCustomerUid:uid,returnCreatedAt:now(),updatedAt:now()});
+      tx.delete(d.collection('activeSessions').doc(uid));
+      tx.set(d.collection('customerTrolleyReturns').doc(uid),{...trolleyReturn,updatedAt:now()});
+    });
+    const state=await buildState(uid);
+    return {...state,trolleyReturn};
   }
 
   const s=await activeSession(uid);if(!s)throw new Error('No active trolley session');
@@ -107,13 +244,92 @@ export async function dashboard(){
   return {trolleys:ts.docs.map(x=>({id:x.id,...x.data()})),orders:os.docs.map(x=>({orderId:x.id,...x.data()}))};
 }
 
+async function nextTrolleyId(){
+  const snapshot=await db().collection('trolleys').get();
+  let max=0;
+  snapshot.docs.forEach(doc=>{
+    const value=String(doc.data().trolleyId||doc.id);
+    const match=value.match(/(\d+)$/);
+    if(match)max=Math.max(max,Number(match[1]));
+  });
+  return `SM-TROLLEY-${String(max+1).padStart(3,'0')}`;
+}
+
 export async function adminAction(action:string,p:Obj){
   const d=db();
+  if(action==='CREATE_TROLLEY'){
+    const trolleyId=code(p.trolleyId)||await nextTrolleyId();
+    const name=code(p.name);
+    if(!name)throw new Error('Trolley name is required');
+    if(!/^[A-Za-z0-9_-]{2,64}$/.test(trolleyId))throw new Error('Trolley ID must be 2-64 letters, numbers, hyphens or underscores');
+    const ref=d.collection('trolleys').doc(trolleyId);
+    await d.runTransaction(async tx=>{
+      const [existingId,existingCode]=await Promise.all([
+        tx.get(ref),
+        tx.get(d.collection('trolleys').where('trolleyId','==',trolleyId).limit(1)),
+      ]);
+      if(existingId.exists||!existingCode.empty)throw new Error(`Trolley ${trolleyId} already exists`);
+      tx.create(ref,{trolleyId,name,qrPayload:code(p.qrPayload)||trolleyId,status:'AVAILABLE',currentSessionId:'',currentUid:'',createdAt:now(),updatedAt:now()});
+    });
+    return {trolleyId,name};
+  }
+  if(action==='SET_TROLLEY_STATUS'){
+    const trolleyId=code(p.trolleyId);
+    const targetStatus=code(p.status).toUpperCase();
+    const reason=code(p.reason);
+    if(!trolleyId)throw new Error('trolleyId is required');
+    if(!['AVAILABLE','DAMAGED'].includes(targetStatus))throw new Error('Unsupported trolley status');
+    if(targetStatus==='DAMAGED'&&!reason)throw new Error('Add a short reason before marking this trolley damaged');
+    await d.runTransaction(async tx=>{
+      const requestedRef=d.collection('trolleys').doc(trolleyId);
+      const requested=await tx.get(requestedRef);
+      const matched= requested.exists
+        ? null
+        : await tx.get(d.collection('trolleys').where('trolleyId','==',trolleyId).limit(1));
+      const trolleyRef=requested.exists
+        ? requestedRef
+        : matched&&!matched.empty
+          ? matched.docs[0]!.ref
+          : requestedRef;
+      const trolley=requested.exists
+        ? requested
+        : matched&&!matched.empty
+          ? matched.docs[0]!
+          : requested;
+      if(!trolley.exists)throw new Error('Trolley not found');
+      const data=trolley.data()!;
+      const currentStatus=code(data.status).toUpperCase();
+      if(['PAID','RETURN_PENDING'].includes(currentStatus))throw new Error('This trolley has a paid or dispatched order. Complete its return through Dispatch first.');
+      if(!['AVAILABLE','IN_USE','PAYMENT_PENDING','DAMAGED','MAINTENANCE'].includes(currentStatus))throw new Error(`Cannot update trolley from ${currentStatus||'unknown'} status`);
+      const sessionId=code(data.currentSessionId);
+      const sessionRef=sessionId?d.collection('sessions').doc(sessionId):null;
+      const session=sessionRef?await tx.get(sessionRef):null;
+      const sessionData=session?.exists?session.data():null;
+      const orderId=code(sessionData?.orderId);
+      const orderRef=orderId?d.collection('orders').doc(orderId):null;
+      const order=orderRef?await tx.get(orderRef):null;
+      if(order?.exists&&code(order.data()?.paymentStatus).toUpperCase()==='PAID')throw new Error('This trolley has a paid order. Complete its return through Dispatch first.');
+      const uid=code(sessionData?.uid||data.currentUid);
+      const activeRef=uid?d.collection('activeSessions').doc(uid):null;
+
+      if(session?.exists){
+        tx.update(sessionRef!,{status:'CANCELLED',closed:true,closeReason:targetStatus==='DAMAGED'?'TROLLEY_DAMAGED':'ADMIN_RELEASED',closedAt:now(),updatedAt:now()});
+      }
+      if(order?.exists&&orderRef&&code(order.data()?.paymentStatus).toUpperCase()!=='PAID'){
+        tx.update(orderRef,{orderStatus:'CANCELLED',cancelReason:targetStatus==='DAMAGED'?'TROLLEY_DAMAGED':'ADMIN_RELEASED',cancelledAt:now(),updatedAt:now()});
+      }
+      if(activeRef)tx.delete(activeRef);
+      tx.update(trolleyRef,{status:targetStatus,currentSessionId:'',currentUid:'',statusReason:reason||'Admin released trolley',statusUpdatedAt:now(),updatedAt:now()});
+      tx.set(d.collection('trolleyMaintenanceLog').doc(id('TML')),{trolleyId,status:targetStatus,previousStatus:currentStatus,reason:reason||'Admin released trolley',cancelledSessionId:sessionId,createdAt:now()});
+    });
+    return {trolleyId,status:targetStatus};
+  }
   if(action==='CONFIRM_PAYMENT'){
     const orderId=code(p.orderId);const oRef=d.collection('orders').doc(orderId);
     await d.runTransaction(async tx=>{
       const o=await tx.get(oRef);if(!o.exists)throw new Error('Order not found');const data=o.data()!;
       if(data.paymentStatus==='PAID')return;
+      if(code(data.orderStatus).toUpperCase()==='CANCELLED')throw new Error('This order was cancelled and cannot be paid');
       const cartRef=d.collection('sessions').doc(String(data.sessionId)).collection('cart');
       const cartSnap=await tx.get(cartRef.where('active','==',true));
       if(cartSnap.empty)throw new Error('Cannot confirm payment: the order has no active items');
@@ -156,7 +372,65 @@ export async function listTrolleyStatuses(){
 
 export async function dispatchAction(action:string,p:Obj){
   const d=db(); const trolley=await trolleyByCode(p.trolleyCode);if(!trolley)throw new Error('Trolley not found');
-  const sessionId=trolley.currentSessionId;if(!sessionId)return {trolley,order:null};
+  const sessionId=code(trolley.currentSessionId);
+  if(action==='RETURN'){
+    let returnedStatus='';
+    await d.runTransaction(async tx=>{
+      const trolleyRef=d.collection('trolleys').doc(trolley.id);
+      const currentTrolley=await tx.get(trolleyRef);
+      if(!currentTrolley.exists)throw new Error('Trolley not found');
+      const currentTrolleyData=currentTrolley.data()!;
+      const currentSessionId=code(currentTrolleyData.currentSessionId);
+      const sessionRef=currentSessionId?d.collection('sessions').doc(currentSessionId):null;
+      const session=sessionRef?await tx.get(sessionRef):null;
+      const orderId=code(session?.data()?.orderId);
+      const orderRef=orderId?d.collection('orders').doc(orderId):null;
+      const order=orderRef?await tx.get(orderRef):null;
+      const orderStatus=code(order?.data()?.orderStatus).toUpperCase();
+      if(currentTrolleyData.status!=='RETURN_PENDING'&&orderStatus!=='DISPATCHED'){
+        throw new Error('Trolley is not waiting for a verified return');
+      }
+      const reasonCode=code(currentTrolleyData.returnReasonCode).toUpperCase();
+      returnedStatus=reasonCode==='TROLLEY_DAMAGED'?'MAINTENANCE':'AVAILABLE';
+      if(order?.exists&&orderRef&&orderStatus==='DISPATCHED'){
+        tx.update(orderRef,{orderStatus:'COMPLETED',completedAt:now(),updatedAt:now()});
+      }
+      if(session?.exists&&sessionRef&&session.data()?.closed!==true){
+        tx.update(sessionRef,{status:'COMPLETED',closed:true,closedAt:now(),updatedAt:now()});
+      }
+      const customerUid=code(currentTrolleyData.returnCustomerUid||session?.data()?.uid);
+      if(customerUid){
+        tx.delete(d.collection('activeSessions').doc(customerUid));
+        tx.set(d.collection('customerTrolleyReturns').doc(customerUid),{
+          trolleyId:code(currentTrolleyData.trolleyId)||currentTrolley.id,
+          status:returnedStatus,
+          reasonCode,
+          returnedAt:now(),
+          updatedAt:now(),
+        },{merge:true});
+      }
+      tx.update(trolleyRef,{
+        status:returnedStatus,
+        currentSessionId:'',
+        currentUid:'',
+        returnCustomerUid:'',
+        returnReasonCode:'',
+        lastReturnedAt:now(),
+        returnedAt:now(),
+        updatedAt:now(),
+      });
+      tx.set(d.collection('dispatchLog').doc(id('DSP')),{
+        orderId:orderId||'',
+        trolleyId:code(currentTrolleyData.trolleyId)||currentTrolley.id,
+        status:'RETURNED',
+        returnStatus:returnedStatus,
+        reasonCode,
+        createdAt:now(),
+      });
+    });
+    return {ok:true,trolleyId:trolley.trolleyId,status:returnedStatus};
+  }
+  if(!sessionId)return {trolley,order:null,items:[]};
   const s=await d.collection('sessions').doc(sessionId).get();const orderId=s.data()?.orderId;
   const o=orderId?await d.collection('orders').doc(orderId).get():null;const order=o?.exists?{orderId:o.id,...o.data()}:null;
   const cartSnap=await d.collection('sessions').doc(sessionId).collection('cart').where('active','==',true).get();
@@ -168,11 +442,6 @@ export async function dispatchAction(action:string,p:Obj){
     if(!items.length||items.some(item=>!checkedItemIds.includes(String(item.cartItemId))))throw new Error('Check every trolley item before dispatch');
     await d.runTransaction(async tx=>{tx.update(o.ref,{orderStatus:'DISPATCHED',dispatchAt:now(),updatedAt:now()});tx.update(s.ref,{status:'DISPATCHED',updatedAt:now()});tx.update(d.collection('trolleys').doc(trolley.id),{status:'RETURN_PENDING',updatedAt:now()});tx.set(d.collection('dispatchLog').doc(id('DSP')),{orderId:o.id,trolleyId:trolley.trolleyId,status:'DISPATCHED',createdAt:now()});});
     return {ok:true,orderId:o.id,trolleyId:trolley.trolleyId};
-  }
-  if(action==='RETURN'){
-    if(!o?.exists||o.data()?.orderStatus!=='DISPATCHED')throw new Error('Dispatch must be completed first');
-    await d.runTransaction(async tx=>{tx.update(o.ref,{orderStatus:'COMPLETED',completedAt:now(),updatedAt:now()});tx.update(s.ref,{status:'COMPLETED',closed:true,closedAt:now(),updatedAt:now()});tx.update(d.collection('trolleys').doc(trolley.id),{status:'AVAILABLE',currentSessionId:'',currentUid:'',lastReturnedAt:now(),updatedAt:now()});if(s.data()?.uid)tx.delete(d.collection('activeSessions').doc(String(s.data()!.uid)));});
-    return {ok:true,trolleyId:trolley.trolleyId};
   }
   throw new Error('Unsupported dispatch action');
 }
@@ -208,6 +477,7 @@ export async function adminProductAction(action:string,p:Obj){
   const d=db();
   if(action==='CREATE_PRODUCT'){
     const productId=code(p.productId)||await nextProductId();
+    if(!/^[A-Za-z0-9_-]{2,64}$/.test(productId))throw new Error('Product ID must be 2-64 letters, numbers, hyphens or underscores');
     const ref=d.collection('products').doc(productId);
     if((await ref.get()).exists)throw new Error(`Product ${productId} already exists`);
     const data=normalizeProductPayload({...p,scanCode:code(p.scanCode)||`SM-${productId}`});

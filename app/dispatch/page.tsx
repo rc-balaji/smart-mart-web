@@ -490,8 +490,8 @@ export default function DispatchPage() {
       'READY_FOR_DISPATCH';
 
   const canReturn =
-    orderStatus ===
-    'DISPATCHED';
+    orderStatus === 'DISPATCHED' ||
+    trolleyStatus === 'RETURN_PENDING';
 
   const blocked =
     Boolean(data?.order) &&
@@ -690,6 +690,10 @@ export default function DispatchPage() {
                         ? 'bg-violet-100 text-violet-800'
                         : trolleyStatus === 'RETURN_PENDING'
                           ? 'bg-amber-100 text-amber-800'
+                          : trolleyStatus === 'DAMAGED'
+                            ? 'bg-red-100 text-red-800'
+                            : trolleyStatus === 'MAINTENANCE'
+                              ? 'bg-orange-100 text-orange-900'
                           : 'bg-slate-100 text-slate-700'
               }`}
             >
@@ -878,9 +882,9 @@ export default function DispatchPage() {
                   </b>
 
                   <small className="mt-1 block">
-                    Confirm only after
-                    the trolley is
-                    physically returned.
+                    {orderStatus === 'DISPATCHED'
+                      ? 'Confirm only after the trolley is physically returned.'
+                      : 'Customer requested a trolley return. Inspect the trolley, then confirm its return.'}
                   </small>
                 </div>
               </div>
@@ -1033,6 +1037,10 @@ export default function DispatchPage() {
                             ? 'bg-violet-100 text-violet-800'
                             : trolley.status === 'RETURN_PENDING'
                               ? 'bg-amber-100 text-amber-800'
+                              : trolley.status === 'DAMAGED'
+                                ? 'bg-red-100 text-red-800'
+                                : trolley.status === 'MAINTENANCE'
+                                  ? 'bg-orange-100 text-orange-900'
                               : 'bg-slate-100 text-slate-700'
                   }`}>
                     {trolley.status}
